@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Providers } from "../components/providers";
+import { ConnectButton } from "../components/connect-button";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -54,6 +55,7 @@ export default function RootLayout({
                   >
                     Dashboard
                   </Link>
+                  <ConnectButton />
                 </div>
               </div>
             </div>

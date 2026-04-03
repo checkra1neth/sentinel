@@ -7,6 +7,13 @@ import { AuditorAgent } from "./agents/auditor-agent.js";
 import { TraderAgent } from "./agents/trader-agent.js";
 
 const app = express();
+app.use((_req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Content-Type, X-Payment");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (_req.method === "OPTIONS") { res.sendStatus(200); return; }
+  next();
+});
 app.use(express.json());
 app.use("/api", serviceRouter);
 

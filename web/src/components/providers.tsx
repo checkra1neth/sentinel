@@ -2,11 +2,13 @@
 
 import { type ReactNode } from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
+import { injected } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { xlayer } from "../lib/chains";
 
 const config = createConfig({
   chains: [xlayer],
+  connectors: [injected()],
   transports: {
     [xlayer.id]: http(),
   },
