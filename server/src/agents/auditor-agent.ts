@@ -1,8 +1,34 @@
 import { type Address, createPublicClient, http } from "viem";
 import { BaseAgent, type ReinvestConfig } from "./base-agent.js";
-import { okxWeb3Get } from "../lib/okx-api.js";
+import { type AgenticWallet } from "../wallet/agentic-wallet.js";
+import { onchainosSecurity } from "../lib/onchainos.js";
+import { okxTokenSecurity } from "../lib/okx-api.js";
+import { config } from "../config.js";
 
-const xlayer = createPublicClient({ transport: http("https://rpc.xlayer.tech") });
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface AuditIssue {
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  title: string;
+  detail: string;
+}
+
+export interface AuditResult {
+  contract: string;
+  contractType: string;
+  bytecodeSize: number;
+  riskScore: number;
+  verdict: "CLEAN" | "LOW_RISK" | "CAUTION" | "DANGEROUS";
+  issues: AuditIssue[];
+  securityScan: Record<string, unknown> | null;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// ABI fragments for probing
+// ---------------------------------------------------------------------------
 
 const inspectAbi = [
   { name: "owner", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
@@ -14,64 +40,122 @@ const inspectAbi = [
   { name: "proxiableUUID", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 async function safeCall<T>(fn: () => Promise<T>): Promise<T | null> {
-  try { return await fn(); } catch { return null; }
+  try {
+    return await fn();
+  } catch {
+    return null;
+  }
 }
 
+const SEVERITY_SCORE: Record<string, number> = {
+  CRITICAL: 40,
+  HIGH: 25,
+  MEDIUM: 10,
+  LOW: 5,
+  INFO: 0,
+};
+
+function computeRiskScore(issues: AuditIssue[]): number {
+  const raw = issues.reduce((sum, i) => sum + (SEVERITY_SCORE[i.severity] ?? 0), 0);
+  return Math.min(raw, 100);
+}
+
+function verdict(score: number): AuditResult["verdict"] {
+  if (score === 0) return "CLEAN";
+  if (score < 20) return "LOW_RISK";
+  if (score < 40) return "CAUTION";
+  return "DANGEROUS";
+}
+
+// ---------------------------------------------------------------------------
+// Agent
+// ---------------------------------------------------------------------------
+
 export class AuditorAgent extends BaseAgent {
-  constructor(walletAddress: Address, reinvestConfig?: ReinvestConfig) {
-    super("auditor", walletAddress, reinvestConfig);
+  constructor(wallet: AgenticWallet, reinvestConfig?: ReinvestConfig) {
+    super("auditor", wallet, reinvestConfig);
   }
 
-  async execute(action: string, params: Record<string, unknown>): Promise<unknown> {
-    if (action !== "quick-scan") throw new Error(`Unknown action: ${action}`);
+  async execute(action: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    if (action !== "quick-scan") {
+      throw new Error(`Unknown action: ${action}`);
+    }
+    return this.quickScan(params);
+  }
 
-    const contract = (params.contract as Address) ?? "0x0";
+  // -----------------------------------------------------------------------
+  // quick-scan
+  // -----------------------------------------------------------------------
+
+  private async quickScan(params: Record<string, unknown>): Promise<AuditResult> {
+    const contract = (params.contract as string) ?? "0x0";
     this.log(`Security scan on ${contract}`);
 
-    // 1. Check bytecode
-    const code = await safeCall(() => xlayer.getCode({ address: contract }));
+    this.emit({
+      timestamp: Date.now(),
+      agent: this.name,
+      type: "scan-start",
+      message: `Starting quick-scan of ${contract}`,
+      details: { contract },
+    });
+
+    const xlayer = createPublicClient({ transport: http(config.xlayerRpcUrl) });
+
+    // 1. Bytecode check
+    const code = await safeCall(() => xlayer.getCode({ address: contract as Address }));
     const isContract = !!code && code !== "0x";
     const bytecodeSize = code ? (code.length - 2) / 2 : 0;
 
     if (!isContract) {
-      return {
-        agent: "Auditor Agent",
-        chain: "X Layer (196)",
+      const result: AuditResult = {
         contract,
-        isContract: false,
-        verdict: "NOT A CONTRACT",
-        detail: "This address is an EOA (externally owned account), not a smart contract.",
-        dataSource: "X Layer RPC (live)",
+        contractType: "EOA",
+        bytecodeSize: 0,
+        riskScore: 0,
+        verdict: "CLEAN",
+        issues: [{ severity: "INFO", title: "Not a contract", detail: "Address is an EOA" }],
+        securityScan: null,
         timestamp: new Date().toISOString(),
       };
+      this.emitScanComplete(contract, result);
+      return result;
     }
 
     // 2. Probe contract interface
-    const [owner, paused, name, symbol, decimals, totalSupply, proxiableUUID] = await Promise.all([
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "owner" })),
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "paused" })),
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "name" })),
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "symbol" })),
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "decimals" })),
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "totalSupply" })),
-      safeCall(() => xlayer.readContract({ address: contract, abi: inspectAbi, functionName: "proxiableUUID" })),
-    ]);
+    const [owner, paused, name, symbol, decimals, totalSupply, proxiableUUID] =
+      await Promise.all([
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "owner" })),
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "paused" })),
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "name" })),
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "symbol" })),
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "decimals" })),
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "totalSupply" })),
+        safeCall(() => xlayer.readContract({ address: contract as Address, abi: inspectAbi, functionName: "proxiableUUID" })),
+      ]);
 
     const isERC20 = symbol !== null && decimals !== null && totalSupply !== null;
     const isUUPS = proxiableUUID !== null;
 
-    // 3. OKX Security API
-    let security: Record<string, unknown> | null = null;
-    try {
-      const data = await okxWeb3Get(
-        `/api/v5/dex/pre-transaction/token-security?chainIndex=196&tokenContractAddress=${contract}`
-      ) as { data?: Array<Record<string, unknown>> };
-      security = (data.data ?? [])[0] ?? null;
-    } catch { /* unavailable */ }
+    // 3. Security scan via OnchainOS
+    const secResult = onchainosSecurity.tokenScan(contract, config.chainId);
+    let securityScan = (secResult.success ? secResult.data : null) as Record<string, unknown> | null;
+
+    // Fallback to OKX direct API
+    if (!securityScan) {
+      try {
+        securityScan = await okxTokenSecurity(String(config.chainId), contract) as Record<string, unknown> | null;
+      } catch {
+        securityScan = null;
+      }
+    }
 
     // 4. Compile issues
-    const issues: Array<{ severity: string; title: string; detail: string }> = [];
+    const issues: AuditIssue[] = [];
 
     if (owner) {
       issues.push({ severity: "MEDIUM", title: "Centralized ownership", detail: `Owner: ${owner}` });
@@ -80,52 +164,69 @@ export class AuditorAgent extends BaseAgent {
       issues.push({ severity: "HIGH", title: "Contract is PAUSED", detail: "All operations may be halted" });
     }
     if (isUUPS) {
-      issues.push({ severity: "INFO", title: "UUPS Proxy", detail: "Contract is upgradeable — implementation can be changed by owner" });
+      issues.push({ severity: "MEDIUM", title: "UUPS Proxy", detail: "Implementation can be changed by owner" });
     }
     if (bytecodeSize > 24576) {
-      issues.push({ severity: "LOW", title: "Large bytecode", detail: `${bytecodeSize} bytes — may hit deployment limits on some chains` });
+      issues.push({ severity: "LOW", title: "Large bytecode", detail: `${bytecodeSize} bytes` });
     }
 
-    if (security) {
-      if (security.isHoneypot === "1") issues.push({ severity: "CRITICAL", title: "Honeypot", detail: "Cannot sell after buying" });
-      if (security.isMintable === "1") issues.push({ severity: "MEDIUM", title: "Mintable", detail: "Supply can be inflated" });
-      if (security.buyTax && Number(security.buyTax) > 0) issues.push({ severity: "LOW", title: "Buy tax", detail: `${security.buyTax}%` });
-      if (security.sellTax && Number(security.sellTax) > 0) issues.push({ severity: "LOW", title: "Sell tax", detail: `${security.sellTax}%` });
-      if (security.isOpenSource === "0") issues.push({ severity: "MEDIUM", title: "Unverified source", detail: "Code not verified on explorer" });
+    if (securityScan) {
+      if (securityScan.isHoneypot === true || securityScan.isHoneypot === "1") {
+        issues.push({ severity: "CRITICAL", title: "Honeypot", detail: "Cannot sell after buying" });
+      }
+      if (securityScan.isMintable === true || securityScan.isMintable === "1") {
+        issues.push({ severity: "MEDIUM", title: "Mintable", detail: "Supply can be inflated" });
+      }
+      const buyTax = Number(securityScan.buyTax ?? 0);
+      const sellTax = Number(securityScan.sellTax ?? 0);
+      if (buyTax > 0) {
+        issues.push({ severity: "LOW", title: "Buy tax", detail: `${buyTax}%` });
+      }
+      if (sellTax > 0) {
+        issues.push({ severity: "LOW", title: "Sell tax", detail: `${sellTax}%` });
+      }
+      if (securityScan.isOpenSource === false || securityScan.isOpenSource === "0") {
+        issues.push({ severity: "MEDIUM", title: "Unverified source", detail: "Code not verified" });
+      }
     }
 
-    const riskScore = issues.reduce((s, i) => {
-      if (i.severity === "CRITICAL") return s + 40;
-      if (i.severity === "HIGH") return s + 25;
-      if (i.severity === "MEDIUM") return s + 10;
-      if (i.severity === "LOW") return s + 5;
-      return s;
-    }, 0);
+    const riskScore = computeRiskScore(issues);
+    const contractType = isERC20 ? "ERC-20" : isUUPS ? "UUPS Proxy" : "Smart Contract";
 
-    return {
-      agent: "Auditor Agent",
-      chain: "X Layer (196)",
+    const result: AuditResult = {
       contract,
-      isContract: true,
+      contractType,
       bytecodeSize,
-      contractType: isERC20 ? "ERC-20 Token" : isUUPS ? "UUPS Proxy" : "Smart Contract",
-      identity: {
-        name: name ?? undefined,
-        symbol: symbol ?? undefined,
-        decimals: decimals !== null ? Number(decimals) : undefined,
-        totalSupply: totalSupply?.toString() ?? undefined,
-        owner: owner ?? "none",
-        paused: paused ?? undefined,
-        upgradeable: isUUPS,
-      },
-      securityScan: {
-        riskScore: Math.min(riskScore, 100),
-        issueCount: issues.length,
-        issues,
-      },
-      verdict: riskScore === 0 ? "CLEAN" : riskScore >= 40 ? "DANGEROUS" : riskScore >= 20 ? "CAUTION" : "LOW RISK",
-      dataSource: "X Layer RPC + OKX Security API (live)",
+      riskScore,
+      verdict: verdict(riskScore),
+      issues,
+      securityScan,
       timestamp: new Date().toISOString(),
     };
+
+    this.emitScanComplete(contract, result);
+    return result;
+  }
+
+  // -----------------------------------------------------------------------
+  // Event helpers
+  // -----------------------------------------------------------------------
+
+  private emitScanComplete(contract: string, result: AuditResult): void {
+    this.emit({
+      timestamp: Date.now(),
+      agent: this.name,
+      type: "scan-complete",
+      message: `Scan of ${contract}: ${result.verdict} (risk ${result.riskScore})`,
+      details: { contract, verdict: result.verdict, riskScore: result.riskScore },
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Auditor never buys other services
+  // -----------------------------------------------------------------------
+
+  override shouldBuyService(_type: string): boolean {
+    return false;
   }
 }
