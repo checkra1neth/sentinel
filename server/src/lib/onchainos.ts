@@ -43,8 +43,8 @@ export function onchainos<T>(command: string): OnchainosResult<T> {
 // ---------------------------------------------------------------------------
 
 export const onchainosWallet = {
-  balance: (token?: string): OnchainosResult<unknown> =>
-    onchainos(`wallet balance${token ? ` --token ${token}` : ""}`),
+  balance: (chainId: number, token?: string): OnchainosResult<unknown> =>
+    onchainos(`wallet balance --chain ${chainId}${token ? ` --token ${token}` : ""} --force`),
 
   send: (to: string, amount: string, token?: string): OnchainosResult<unknown> =>
     onchainos(`wallet send --to ${to} --amount ${amount}${token ? ` --token ${token}` : ""}`),
