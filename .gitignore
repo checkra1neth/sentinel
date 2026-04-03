@@ -1,0 +1,16 @@
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
