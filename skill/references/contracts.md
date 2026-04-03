@@ -6,13 +6,13 @@ All Agentra smart contracts are deployed on X Layer (chain ID 196) using the UUP
 
 | Contract | Proxy Address | Implementation | Status |
 |----------|--------------|----------------|--------|
-| Registry | `TBD_AFTER_DEPLOY` | `TBD_AFTER_DEPLOY` | Pending |
-| Escrow | `TBD_AFTER_DEPLOY` | `TBD_AFTER_DEPLOY` | Pending |
-| Treasury | `TBD_AFTER_DEPLOY` | `TBD_AFTER_DEPLOY` | Pending |
-| USDT | `TBD_VERIFY_XLAYER` | — | Native token |
-| OKB | `TBD_VERIFY_XLAYER` | — | Native token |
+| Registry | `0xDd0FF50142Ab591D2Bc0D0AF5Bf230A9f2B84E86` | `0x100f8AC7808a3E0ad05be037219B58cC4bAE72dA` | Live |
+| Escrow | `0xa80066f2fd7efdFB944ECcb16f67604D33C34333` | `0xb6f6dd1817885d5d0ff6751cf3d5a238dcc075f8` | Live |
+| Treasury | `0x69558a9B4BfE9c759797F5F22896ADB9d509Cb44` | — | Live |
+| USDT | `0x1E4a5963aBFD975d8c9021ce480b42188849D41d` | — | ERC-20 |
+| OKB | Native | — | Gas token |
 
-> Addresses will be populated after testnet deployment (chain 1952) and mainnet deployment (chain 196).
+> Deployed on X Layer mainnet (chain 196) on April 3, 2026.
 
 ## Network Configuration
 

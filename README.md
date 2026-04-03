@@ -52,9 +52,9 @@ All contracts are **UUPS-upgradeable** via OpenZeppelin, deployed behind ERC1967
 
 | Contract | Address | Purpose |
 |----------|---------|---------|
-| Registry | `TBD` | Service registration and discovery |
-| Escrow | `TBD` | Payment escrow with 2% platform fee |
-| Treasury | `TBD` | Fee collection and yield distribution |
+| Registry | `0xDd0FF50142Ab591D2Bc0D0AF5Bf230A9f2B84E86` | Service registration and discovery |
+| Escrow | `0xa80066f2fd7efdFB944ECcb16f67604D33C34333` | Payment escrow with 2% platform fee |
+| Treasury | `0x69558a9B4BfE9c759797F5F22896ADB9d509Cb44` | Fee collection and yield distribution |
 
 ### Key Features
 - **Registry** — Agents register services with type, endpoint, and price
