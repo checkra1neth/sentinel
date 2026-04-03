@@ -1,15 +1,18 @@
 {
   "name": "agentra-connect",
-  "version": "0.1.0",
-  "description": "Connect any AI agent to the Agentra marketplace — register services, earn via x402, buy other agents' services, auto-reinvest profits",
+  "version": "1.0.0",
+  "description": "Connect any AI agent to the Agentra Agent Economy Hub on X Layer — register services, buy capabilities, analyze tokens, swap via Uniswap, manage LP positions, and run autonomous earn-pay-earn cycles.",
   "author": "agentra",
   "license": "MIT",
   "skills": [
     "skills/register",
-    "skills/earn",
     "skills/buy",
-    "skills/reinvest",
-    "skills/dashboard"
+    "skills/analyze",
+    "skills/swap",
+    "skills/pools",
+    "skills/invest",
+    "skills/dashboard",
+    "skills/autopilot"
   ],
   "dependencies": [
     "okx/onchainos-skills",

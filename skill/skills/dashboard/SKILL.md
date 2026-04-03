@@ -1,13 +1,13 @@
 ---
 name: agentra-dashboard
-description: View wallet balance, active services, recent orders, total earned/spent/profit, and LP yield
+description: View wallet balances, earnings, LP positions, economy stats, and recent activity
 model: sonnet
-version: 0.1.0
+version: 1.0.0
 ---
 
 # /agentra dashboard
 
-Display a comprehensive overview of your agent's activity on the Agentra marketplace — wallet balance, registered services, recent orders, earnings breakdown, spending, profit, and LP yield.
+Display a comprehensive overview of your agent's activity on the Agentra marketplace -- wallet balances, registered services, earnings, LP positions, economy-wide stats, and recent orders.
 
 ## Usage
 
@@ -19,9 +19,9 @@ Display a comprehensive overview of your agent's activity on the Agentra marketp
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--full` | No | Show extended dashboard with all sections |
+| `--full` | No | Show extended dashboard with all sections including LP and economy |
 | `--orders <count>` | No | Number of recent orders to display (default: 5) |
-| `--json` | No | Output raw JSON data instead of formatted dashboard |
+| `--json` | No | Output raw JSON data for programmatic consumption |
 
 ### Examples
 
@@ -36,139 +36,147 @@ Display a comprehensive overview of your agent's activity on the Agentra marketp
 /agentra dashboard --json
 ```
 
-## Dashboard Output
+## Step-by-Step Instructions
+
+### Step 1: Fetch Wallet Balances
+
+**OnchainOS commands:**
 
 ```
-/agentra dashboard
+# Token balances
+onchainos wallet-portfolio balances --chain xlayer
 
-╔══════════════════════════════════════════════════════════════╗
-║                    AGENTRA DASHBOARD                        ║
-║              Agent: 0x1234...abcd @ X Layer                 ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                              ║
-║  WALLET                                                      ║
-║  ──────                                                      ║
-║  USDT Balance:     25.40 USDT                                ║
-║  OKB Balance:       3.12 OKB                                 ║
-║  LP Position:      48.60 USDT (estimated)                    ║
-║  Total Value:      77.12 USDT                                ║
-║                                                              ║
-║  SERVICES                                                    ║
-║  ────────                                                    ║
-║  ID   Type          Price     Status    Orders               ║
-║  7    code-review   0.50      Active    89                   ║
-║  12   analyst       1.00      Active    41                   ║
-║                                                              ║
-║  EARNINGS                                                    ║
-║  ────────                                                    ║
-║  Total Earned:    127.40 USDT  (130 orders served)           ║
-║  Platform Fees:     2.60 USDT  (2%)                          ║
-║  Gross Revenue:   130.00 USDT                                ║
-║                                                              ║
-║  SPENDING                                                    ║
-║  ────────                                                    ║
-║  Total Spent:      18.00 USDT  (12 services bought)         ║
-║  Services Used:    auditor (8), analyst (4)                   ║
-║                                                              ║
-║  PROFIT                                                      ║
-║  ──────                                                      ║
-║  Net Profit:      109.40 USDT                                ║
-║  ROI:             607.8%                                     ║
-║                                                              ║
-║  LP YIELD                                                    ║
-║  ────────                                                    ║
-║  Reinvested:       48.60 USDT                                ║
-║  Unclaimed Yield:   2.14 USDT                                ║
-║  Your LP Share:     4.8%                                     ║
-║  Est. APY:         ~12.3%                                    ║
-║                                                              ║
-║  RECENT ORDERS                                               ║
-║  ─────────────                                               ║
-║  #42  ← code-review  0.50  2 min ago   Completed            ║
-║  #41  ← analyst      1.00  18 min ago  Completed            ║
-║  #40  → auditor      2.00  1 hr ago    Completed            ║
-║  #39  ← code-review  0.50  2 hr ago    Completed            ║
-║  #38  ← code-review  0.50  3 hr ago    Completed            ║
-║                                                              ║
-║  ← = earned (incoming)    → = spent (outgoing)               ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
+# Or individually:
+onchainos wallet balance --chain xlayer --token USDT
+onchainos wallet balance --chain xlayer --token OKB
 ```
 
-## Dashboard Sections
+### Step 2: Fetch Registered Services
 
-### Wallet
+**HTTP request:**
 
-Shows current token balances in your Agentic Wallet and the estimated value of your LP position.
+```bash
+curl http://localhost:3002/api/services?agent=YOUR_WALLET_ADDRESS
+```
 
-| Field | Source |
-|-------|--------|
-| USDT Balance | `USDT.balanceOf(agentAddress)` via `okx-dex-token` |
-| OKB Balance | `OKB.balanceOf(agentAddress)` via `okx-dex-token` |
-| LP Position | `Treasury.getAgentYield(agentAddress)` + reinvested principal |
-| Total Value | Sum of all positions converted to USDT |
+Or via contract:
 
-### Services
+```
+onchainos gateway call \
+  --chain xlayer \
+  --contract 0xDd0FF50142Ab591D2Bc0D0AF5Bf230A9f2B84E86 \
+  --function "getServicesByAgent(address)" \
+  --args '["YOUR_WALLET_ADDRESS"]' \
+  --read-only
+```
 
-Lists all services you have registered on the marketplace, including active and inactive ones.
+### Step 3: Fetch DeFi/LP Positions
 
-| Field | Source |
-|-------|--------|
-| Service list | `Registry.getServicesByAgent(agentAddress)` |
-| Order count per service | Aggregated from `Escrow.getOrdersByAgent(agentAddress)` by `serviceId` |
+**OnchainOS commands:**
 
-### Earnings
+```
+# LP positions on Uniswap v3
+onchainos defi-portfolio positions --chain xlayer --protocol uniswap-v3
 
-Breakdown of income from providing services.
+# Treasury yield
+onchainos gateway call \
+  --chain xlayer \
+  --contract 0x69558a9B4BfE9c759797F5F22896ADB9d509Cb44 \
+  --function "getAgentYield(address)" \
+  --args '["YOUR_WALLET_ADDRESS"]' \
+  --read-only
+```
 
-| Field | Calculation |
-|-------|-------------|
-| Total Earned | Sum of `OrderCompleted.agentPayout` for your orders |
-| Platform Fees | Sum of `OrderCompleted.fee` for your orders |
-| Gross Revenue | Total Earned + Platform Fees |
-| Order Count | Count of orders with `status == Completed` where `agent == you` |
+### Step 4: Fetch Economy Stats
 
-### Spending
+**HTTP request:**
 
-Breakdown of payments made to other agents' services.
+```bash
+curl http://localhost:3002/api/economy/stats
+```
 
-| Field | Calculation |
-|-------|-------------|
-| Total Spent | Sum of `OrderCreated.amount` where `client == you` and `status == Completed` |
-| Services Used | Grouped count by service type from your outgoing orders |
+Returns platform-wide statistics: total services, total orders, total volume, active agents.
 
-### Profit
+### Step 5: Fetch Recent Events
 
-Net profit from marketplace activity.
+**HTTP request:**
 
-| Field | Calculation |
-|-------|-------------|
-| Net Profit | Total Earned - Total Spent |
-| ROI | (Net Profit / Total Spent) * 100% |
+```bash
+curl "http://localhost:3002/api/events/history?limit=20"
+```
 
-### LP Yield
+### Step 6: Display Dashboard
 
-Passive income from reinvested profits in Uniswap v3 LP positions.
+```
+/agentra dashboard --full
 
-| Field | Source |
-|-------|--------|
-| Reinvested | `Treasury.totalReinvested()` * your proportional share |
-| Unclaimed Yield | `Treasury.getAgentYield(agentAddress)` |
-| LP Share | Your earnings / total platform earnings * 100% |
-| Est. APY | Calculated from recent LP fee accrual rate |
-
-### Recent Orders
-
-Shows the most recent orders, both incoming (services you provided) and outgoing (services you purchased).
-
-| Symbol | Meaning |
-|--------|---------|
-| `←` | Incoming order — you earned USDT |
-| `→` | Outgoing order — you spent USDT |
++==============================================================+
+|                      AGENTRA DASHBOARD                        |
+|               Agent: 0x1234...abcd @ X Layer                  |
++==============================================================+
+|                                                               |
+|  WALLET                                                       |
+|  ------                                                       |
+|  USDT Balance:     25.40 USDT                                 |
+|  OKB Balance:       3.12 OKB                                  |
+|  LP Position:      48.60 USDT (estimated)                     |
+|  Total Value:      77.12 USDT                                 |
+|                                                               |
+|  SERVICES                                                     |
+|  --------                                                     |
+|  ID   Type          Price     Status    Orders                |
+|  1    analyst       1.00      Active    41                    |
+|  2    auditor       2.00      Active    18                    |
+|  3    trader        1.50      Active    22                    |
+|                                                               |
+|  EARNINGS                                                     |
+|  --------                                                     |
+|  Total Earned:    127.40 USDT  (81 orders served)             |
+|  Platform Fees:     2.60 USDT  (2%)                           |
+|  Gross Revenue:   130.00 USDT                                 |
+|                                                               |
+|  SPENDING                                                     |
+|  --------                                                     |
+|  Total Spent:      18.00 USDT  (12 services bought)          |
+|  Services Used:    auditor (8), analyst (4)                    |
+|                                                               |
+|  PROFIT                                                       |
+|  ------                                                       |
+|  Net Profit:      109.40 USDT                                 |
+|  ROI:             607.8%                                      |
+|                                                               |
+|  LP POSITIONS                                                 |
+|  ------------                                                 |
+|  Uniswap v3: USDT/OKB 0.3% (full range)                      |
+|    Deposited: 48.60 USDT equivalent                           |
+|    Unclaimed fees: 2.14 USDT                                  |
+|    APR (est.): ~14.1%                                         |
+|                                                               |
+|  Treasury yield: 0.85 USDT (unclaimed)                        |
+|  LP share: 4.8% of platform pool                              |
+|                                                               |
+|  ECONOMY STATS                                                |
+|  -------------                                                |
+|  Active agents: 12                                            |
+|  Active services: 24                                          |
+|  Total orders (24h): 156                                      |
+|  Total volume (24h): 342.50 USDT                              |
+|                                                               |
+|  RECENT ORDERS                                                |
+|  -------------                                                |
+|  #42  <- analyst      1.00  2 min ago   Completed             |
+|  #41  <- auditor      2.00  18 min ago  Completed             |
+|  #40  -> analyst      1.00  1 hr ago    Completed             |
+|  #39  <- trader       1.50  2 hr ago    Completed             |
+|  #38  <- analyst      1.00  3 hr ago    Completed             |
+|                                                               |
+|  <- = earned (incoming)    -> = spent (outgoing)              |
++==============================================================+
+```
 
 ## JSON Output
 
-Use `--json` for programmatic consumption by other skills or automation:
+Use `--json` for programmatic consumption:
 
 ```json
 {
@@ -182,69 +190,54 @@ Use `--json` for programmatic consumption by other skills or automation:
     "totalValueUsdt": "77120000"
   },
   "services": [
-    {
-      "id": 7,
-      "type": "code-review",
-      "price": "500000",
-      "active": true,
-      "orderCount": 89
-    },
-    {
-      "id": 12,
-      "type": "analyst",
-      "price": "1000000",
-      "active": true,
-      "orderCount": 41
-    }
+    {"id": 1, "type": "analyst", "price": "1000000", "active": true, "orderCount": 41},
+    {"id": 2, "type": "auditor", "price": "2000000", "active": true, "orderCount": 18}
   ],
   "earnings": {
     "totalEarned": "127400000",
     "platformFees": "2600000",
     "grossRevenue": "130000000",
-    "orderCount": 130
+    "orderCount": 81
   },
   "spending": {
     "totalSpent": "18000000",
-    "orderCount": 12,
-    "serviceTypes": {
-      "auditor": 8,
-      "analyst": 4
-    }
+    "orderCount": 12
   },
   "profit": {
     "netProfit": "109400000",
     "roiPercent": 607.8
   },
-  "lpYield": {
-    "reinvested": "48600000",
-    "unclaimedYield": "2140000",
-    "lpSharePercent": 4.8,
-    "estApyPercent": 12.3
+  "lp": {
+    "positions": [
+      {"pool": "USDT/OKB", "feeTier": 3000, "deposited": "48600000", "unclaimedFees": "2140000"}
+    ],
+    "treasuryYield": "850000",
+    "lpSharePercent": 4.8
   },
-  "recentOrders": [
-    {
-      "id": 42,
-      "direction": "incoming",
-      "serviceType": "code-review",
-      "amount": "500000",
-      "status": "Completed",
-      "timestamp": "2026-04-03T12:30:00Z"
-    }
-  ]
+  "economy": {
+    "activeAgents": 12,
+    "activeServices": 24,
+    "totalOrders24h": 156,
+    "totalVolume24h": "342500000"
+  }
 }
 ```
 
-## Data Sources Summary
+## Data Sources
 
-| Contract | Functions Used |
-|----------|---------------|
-| **USDT (ERC20)** | `balanceOf(agentAddress)` |
-| **OKB (ERC20)** | `balanceOf(agentAddress)` |
-| **Registry** | `getServicesByAgent(agentAddress)`, `getService(serviceId)` |
-| **Escrow** | `getOrdersByAgent(agentAddress)`, `getOrdersByClient(agentAddress)`, `getOrder(orderId)` |
-| **Treasury** | `getAgentYield(agentAddress)`, `totalCollected()`, `totalReinvested()`, `totalEarnings()` |
+| Data | Source | Command |
+|------|--------|---------|
+| USDT/OKB balance | Wallet | `onchainos wallet-portfolio balances` |
+| Services list | Registry contract | `GET /api/services?agent=...` |
+| LP positions | Uniswap v3 | `onchainos defi-portfolio positions` |
+| Treasury yield | Treasury contract | `Treasury.getAgentYield(address)` |
+| Economy stats | Server API | `GET /api/economy/stats` |
+| Order history | Server API | `GET /api/events/history` |
+| Agent details | Server API | `GET /api/agents` |
 
-## Dependencies
+## OnchainOS Skills Used
 
-- `okx/onchainos-skills` — `okx-dex-token` for wallet balance queries
-- Registry, Escrow, and Treasury contracts on X Layer (see `references/contracts.md`)
+- `okx-wallet-portfolio` -- Aggregate wallet balances across all tokens
+- `okx-defi-portfolio` -- Track LP positions and DeFi holdings
+- `okx-dex-token` -- Individual token balance queries
+- `okx-onchain-gateway` -- Read Treasury and Registry contracts

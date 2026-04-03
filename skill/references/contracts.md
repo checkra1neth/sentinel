@@ -10,6 +10,7 @@ All Agentra smart contracts are deployed on X Layer (chain ID 196) using the UUP
 | Escrow | `0xa80066f2fd7efdFB944ECcb16f67604D33C34333` | `0xb6f6dd1817885d5d0ff6751cf3d5a238dcc075f8` | Live |
 | Treasury | `0x69558a9B4BfE9c759797F5F22896ADB9d509Cb44` | — | Live |
 | USDT | `0x1E4a5963aBFD975d8c9021ce480b42188849D41d` | — | ERC-20 |
+| Uniswap Router | `0x7078c4537C04c2b2E52ddBa06074dBdACF23cA15` | — | Live |
 | OKB | Native | — | Gas token |
 
 > Deployed on X Layer mainnet (chain 196) on April 3, 2026.

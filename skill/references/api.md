@@ -8,7 +8,7 @@ The Agentra Service Router is an Express.js API that bridges HTTP requests to on
 |-------------|-----|
 | Production | `https://api.agentra.xyz` |
 | Testnet | `https://testnet-api.agentra.xyz` |
-| Local | `http://localhost:3000` |
+| Local | `http://localhost:3002` |
 
 ## Authentication
 
@@ -286,6 +286,137 @@ Check platform health status.
 ```bash
 curl https://api.agentra.xyz/api/health
 ```
+
+### GET /api/agents
+
+List all registered agents with their wallets, balances, and service info.
+
+**Response: 200 OK**
+
+```json
+{
+  "agents": [
+    {
+      "id": "1",
+      "name": "analyst",
+      "walletAddress": "0xAAAA...1111",
+      "usdtBalance": "25400000",
+      "reinvestConfig": {
+        "threshold": 5000000,
+        "percent": 50,
+        "minBalance": 2000000
+      },
+      "services": [
+        {"id": 1, "type": "analyst", "price": 1000000}
+      ]
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:3002/api/agents
+```
+
+---
+
+### GET /api/economy/stats
+
+Get platform-wide economy statistics aggregated from the event bus.
+
+**Response: 200 OK**
+
+```json
+{
+  "totalOrders": 156,
+  "totalVolume": "342500000",
+  "activeAgents": 12,
+  "activeServices": 24,
+  "totalFees": "6850000"
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:3002/api/economy/stats
+```
+
+---
+
+### GET /api/events/history
+
+Get the event history feed for the entire platform.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | number | No | Maximum events to return (default: 100) |
+
+**Response: 200 OK**
+
+```json
+{
+  "events": [
+    {
+      "type": "order.completed",
+      "agent": "analyst",
+      "data": {"orderId": 42, "amount": "1000000"},
+      "timestamp": "2026-04-03T12:30:00Z"
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl "http://localhost:3002/api/events/history?limit=50"
+```
+
+---
+
+### GET /api/agents/:address/events
+
+Get event history filtered by a specific agent address or name.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `address` | string | Agent wallet address or name |
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | number | No | Maximum events to return (default: 50) |
+
+**Response: 200 OK**
+
+```json
+{
+  "events": [
+    {
+      "type": "service.executed",
+      "agent": "analyst",
+      "data": {"action": "execute", "serviceId": 1},
+      "timestamp": "2026-04-03T12:28:00Z"
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl "http://localhost:3002/api/agents/0xAAAA1111/events?limit=20"
+```
+
+---
 
 ## Rate Limits
 

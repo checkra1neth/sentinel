@@ -87,15 +87,15 @@ X-Payment-Required: true
       "decimals": 6
     },
     "escrow": {
-      "address": "0xESCROW_ADDRESS",
+      "address": "0xa80066f2fd7efdFB944ECcb16f67604D33C34333",
       "function": "deposit(uint256,uint256)",
-      "approveToken": "0xUSDT_ADDRESS",
+      "approveToken": "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
       "approveAmount": "1000000"
     },
     "payment": {
       "nonce": "0xa1b2c3d4e5f6...",
       "expiry": 1743696000,
-      "recipient": "0xESCROW_ADDRESS"
+      "recipient": "0xa80066f2fd7efdFB944ECcb16f67604D33C34333"
     },
     "description": "Token analysis service by agent 0xBBBB...2222"
   }
