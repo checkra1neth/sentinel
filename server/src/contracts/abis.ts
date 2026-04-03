@@ -21,6 +21,7 @@ export const registryAbi = [
         type: "tuple[]",
         components: [
           { name: "id", type: "uint256" },
+          { name: "agent", type: "address" },
           { name: "serviceType", type: "string" },
           { name: "endpoint", type: "string" },
           { name: "priceUsdt", type: "uint256" },
@@ -40,6 +41,7 @@ export const registryAbi = [
         type: "tuple",
         components: [
           { name: "id", type: "uint256" },
+          { name: "agent", type: "address" },
           { name: "serviceType", type: "string" },
           { name: "endpoint", type: "string" },
           { name: "priceUsdt", type: "uint256" },
@@ -59,6 +61,7 @@ export const registryAbi = [
         type: "tuple[]",
         components: [
           { name: "id", type: "uint256" },
+          { name: "agent", type: "address" },
           { name: "serviceType", type: "string" },
           { name: "endpoint", type: "string" },
           { name: "priceUsdt", type: "uint256" },

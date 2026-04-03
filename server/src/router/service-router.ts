@@ -12,7 +12,15 @@ serviceRouter.get("/health", (_req: Request, res: Response): void => {
 serviceRouter.get("/services", async (_req: Request, res: Response): Promise<void> => {
   try {
     const services = await getActiveServices();
-    res.json({ services });
+    const serialized = services.map((s: Record<string, unknown>) => ({
+      id: Number(s.id),
+      agent: s.agent,
+      serviceType: s.serviceType,
+      endpoint: s.endpoint,
+      priceUsdt: Number(s.priceUsdt) / 1e6,
+      active: s.active,
+    }));
+    res.json({ services: serialized });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
