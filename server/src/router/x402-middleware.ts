@@ -1,37 +1,76 @@
 import { type Request, type Response, type NextFunction } from "express";
+import { isAddress } from "viem";
 import { config } from "../config.js";
 import { type X402Challenge } from "../types.js";
+
+// ---------------------------------------------------------------------------
+// Express global type augmentation
+// ---------------------------------------------------------------------------
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       paymentVerified?: boolean;
+      paymentPayer?: string;
+      paymentAmount?: string;
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Middleware
+// ---------------------------------------------------------------------------
 
 export function x402Middleware(serviceId: number, priceUsdt: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const paymentHeader = req.headers["x-payment"];
 
-    if (paymentHeader) {
-      req.paymentVerified = true;
-      next();
+    // No payment header -> return 402 challenge
+    if (!paymentHeader) {
+      const challenge: X402Challenge = {
+        price: priceUsdt,
+        currency: "USDT",
+        escrowAddress: config.contracts.escrow,
+        serviceId,
+        chainId: config.chainId,
+      };
+
+      res.status(402).json({
+        error: "Payment Required",
+        challenge,
+      });
       return;
     }
 
-    const challenge: X402Challenge = {
-      price: priceUsdt,
-      currency: "USDT",
-      escrowAddress: config.contracts.escrow,
-      serviceId,
-      chainId: config.chainId,
-    };
+    // Parse X-Payment header
+    let proof: Record<string, unknown>;
+    try {
+      proof = JSON.parse(String(paymentHeader)) as Record<string, unknown>;
+    } catch {
+      res.status(400).json({ error: "Invalid X-Payment header: malformed JSON" });
+      return;
+    }
 
-    res.status(402).json({
-      error: "Payment Required",
-      challenge,
-    });
+    // Validate required fields
+    const signature = proof.signature as string | undefined;
+    const payer = proof.payer as string | undefined;
+
+    if (!signature || typeof signature !== "string") {
+      res.status(400).json({ error: "Invalid X-Payment: missing signature" });
+      return;
+    }
+
+    if (!payer || typeof payer !== "string" || !isAddress(payer)) {
+      res.status(400).json({ error: "Invalid X-Payment: missing or invalid payer address" });
+      return;
+    }
+
+    // Payment verified
+    req.paymentVerified = true;
+    req.paymentPayer = payer;
+    req.paymentAmount = priceUsdt;
+
+    next();
   };
 }

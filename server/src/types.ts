@@ -164,7 +164,7 @@ export interface PoolInfo {
 export interface AgentEvent {
   timestamp: number;
   agent: string;
-  type: "scan" | "buy_service" | "sell_service" | "swap" | "reinvest" | "error";
+  type: string;
   message: string;
   txHash?: string;
   details?: Record<string, unknown>;
