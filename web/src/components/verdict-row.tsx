@@ -213,119 +213,81 @@ export const VerdictRow = forwardRef<
         style={{ height: 0, opacity: 0 }}
       >
         <div
-          className="px-4 pb-3 pt-1"
+          className="px-4 pb-3 pt-1.5 space-y-2"
           style={{ borderLeft: `3px solid ${color}`, marginLeft: 0 }}
         >
-          {/* Grid layout: market data + DeFi pool side by side */}
-          <div className="flex gap-4">
-            {/* Left: Market data grid */}
-            <div className="flex-1 min-w-0">
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-x-5 gap-y-2.5 py-2">
-                <StatCell label="Price" value={formatUsd(verdict.priceUsd)} />
-                <StatCell label="MCap" value={formatUsd(verdict.marketCap)} />
-                <StatCell label="Liquidity" value={formatUsd(verdict.liquidityUsd)} />
-                {(verdict.volume24H ?? 0) > 0 && (
-                  <StatCell label="Vol 24H" value={formatUsd(verdict.volume24H ?? 0)} />
-                )}
-                {(verdict.holders ?? 0) > 0 && (
-                  <StatCell label="Holders" value={formatCompact(verdict.holders ?? 0)} />
-                )}
-                {verdict.holderConcentration > 0 && (
-                  <StatCell
-                    label="Top 10"
-                    value={`${verdict.holderConcentration.toFixed(1)}%`}
-                    color={verdict.holderConcentration > 30 ? "#f59e0b" : undefined}
-                  />
-                )}
-                <StatCell
-                  label="Buy Tax"
-                  value={`${verdict.buyTax}%`}
-                  color={verdict.buyTax > 5 ? "#ef4444" : undefined}
-                />
-                <StatCell
-                  label="Sell Tax"
-                  value={`${verdict.sellTax}%`}
-                  color={verdict.sellTax > 5 ? "#ef4444" : undefined}
-                />
-              </div>
-            </div>
-
-            {/* Right: DeFi pool card (if exists) */}
-            {verdict.defiPool && (
-              <div
-                className="shrink-0 w-44 rounded-md px-3 py-2.5 flex flex-col justify-center gap-1.5 self-start"
-                style={{ backgroundColor: "rgba(99, 102, 241, 0.05)", border: "1px solid rgba(99, 102, 241, 0.12)" }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#6366f1]/70">
-                    {verdict.defiPool.platform}
-                  </span>
-                </div>
-                <span className="text-xs text-[#e8eaed] font-mono leading-tight">
-                  {verdict.defiPool.name}
-                </span>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-semibold tabular-nums text-[#34d399]">
-                    {(Number(verdict.defiPool.apr) * 100).toFixed(1)}%
-                  </span>
-                  <span className="text-[10px] text-[#7a7f8a]/60 uppercase">APR</span>
-                </div>
-                <span className="text-[10px] text-[#7a7f8a]/50 tabular-nums font-mono">
-                  TVL {formatUsd(Number(verdict.defiPool.tvl))}
-                </span>
-              </div>
+          {/* Row 1: all market stats inline */}
+          <div className="flex items-baseline gap-x-5 gap-y-1 flex-wrap text-xs">
+            <span><span className="text-[#7a7f8a]/60">Price </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.priceUsd)}</span></span>
+            <span><span className="text-[#7a7f8a]/60">MCap </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.marketCap)}</span></span>
+            <span><span className="text-[#7a7f8a]/60">Liq </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.liquidityUsd)}</span></span>
+            {(verdict.volume24H ?? 0) > 0 && (
+              <span><span className="text-[#7a7f8a]/60">Vol </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.volume24H ?? 0)}</span></span>
             )}
+            {(verdict.holders ?? 0) > 0 && (
+              <span><span className="text-[#7a7f8a]/60">Holders </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatCompact(verdict.holders ?? 0)}</span></span>
+            )}
+            {verdict.holderConcentration > 0 && (
+              <span><span className="text-[#7a7f8a]/60">Top10 </span><span className="font-mono tabular-nums" style={{ color: verdict.holderConcentration > 30 ? "#f59e0b" : "#e8eaed" }}>{verdict.holderConcentration.toFixed(1)}%</span></span>
+            )}
+            <span><span className="text-[#7a7f8a]/60">Tax </span><span className="font-mono tabular-nums" style={{ color: verdict.buyTax > 5 || verdict.sellTax > 5 ? "#ef4444" : "#e8eaed" }}>{verdict.buyTax}/{verdict.sellTax}%</span></span>
           </div>
 
-          {/* Bottom: risks + actions on one line */}
-          <div className="flex items-center gap-3 pt-2 border-t border-[#1a1d24]/40 mt-1">
-            {/* Risks */}
-            {verdict.risks.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
-                {verdict.risks.map((risk) => (
-                  <span
-                    key={risk}
-                    className="rounded px-1.5 py-px text-[9px] uppercase tracking-wider text-[#7a7f8a]/70 bg-[#1a1d24]/60"
-                  >
-                    {risk}
-                  </span>
-                ))}
-              </div>
+          {/* Row 2: DeFi pool (inline) + risk tags */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {verdict.defiPool && (
+              <span
+                className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px]"
+                style={{ backgroundColor: "rgba(99, 102, 241, 0.06)", border: "1px solid rgba(99, 102, 241, 0.12)" }}
+              >
+                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#6366f1]/70">{verdict.defiPool.platform}</span>
+                <span className="text-[#e8eaed]/80 font-mono">{verdict.defiPool.name}</span>
+                <span className="text-[#34d399] font-semibold tabular-nums">{(Number(verdict.defiPool.apr) * 100).toFixed(1)}%</span>
+                <span className="text-[#7a7f8a]/40 tabular-nums font-mono">{formatUsd(Number(verdict.defiPool.tvl))}</span>
+              </span>
             )}
+            {verdict.risks.map((risk) => (
+              <span
+                key={risk}
+                className="rounded px-1.5 py-px text-[9px] uppercase tracking-wider text-[#7a7f8a]/50 bg-[#1a1d24]/50"
+              >
+                {risk}
+              </span>
+            ))}
+          </div>
 
-            {/* Actions */}
-            <div className="shrink-0 flex items-center gap-3">
-              {verdict.txHash && (
-                <a
-                  href={`https://www.oklink.com/xlayer/tx/${verdict.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] text-[#6366f1]/70 hover:text-[#818cf8] transition-colors"
-                >
-                  Tx <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              )}
+          {/* Row 3: actions */}
+          <div className="flex items-center gap-3 pt-0.5">
+            {verdict.txHash && (
               <a
-                href={`https://www.oklink.com/xlayer/address/${verdict.token}`}
+                href={`https://www.oklink.com/xlayer/tx/${verdict.txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-[#6366f1]/70 hover:text-[#818cf8] transition-colors"
+                className="inline-flex items-center gap-1 text-[11px] text-[#6366f1]/60 hover:text-[#818cf8] transition-colors"
               >
-                Contract <ExternalLink className="h-2.5 w-2.5" />
+                Tx <ExternalLink className="h-2.5 w-2.5" />
               </a>
-              {onScanAgain && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onScanAgain(verdict.token);
-                  }}
-                  className="inline-flex items-center gap-1 text-[11px] text-[#7a7f8a]/50 hover:text-[#e8eaed] transition-colors cursor-pointer"
-                >
-                  <RefreshCw className="h-2.5 w-2.5" />
-                  Rescan
-                </button>
-              )}
-            </div>
+            )}
+            <a
+              href={`https://www.oklink.com/xlayer/address/${verdict.token}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-[#6366f1]/60 hover:text-[#818cf8] transition-colors"
+            >
+              Contract <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+            {onScanAgain && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onScanAgain(verdict.token);
+                }}
+                className="inline-flex items-center gap-1 text-[11px] text-[#7a7f8a]/40 hover:text-[#e8eaed] transition-colors cursor-pointer"
+              >
+                <RefreshCw className="h-2.5 w-2.5" />
+                Rescan
+              </button>
+            )}
           </div>
         </div>
       </div>
