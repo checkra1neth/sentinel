@@ -3,13 +3,16 @@
 import { useAgentEvents, type AgentEvent } from "../lib/ws";
 
 const AGENT_COLORS: Record<string, string> = {
-  Analyst: "text-blue-400",
-  Auditor: "text-purple-400",
-  Trader: "text-emerald-400",
-  Reinvest: "text-yellow-400",
+  Scanner: "text-blue-400",
+  Analyst: "text-purple-400",
+  Executor: "text-emerald-400",
+  Sentinel: "text-yellow-400",
+  Cron: "text-gray-400",
 };
 
 const EVENT_ICONS: Record<string, string> = {
+  verdict: "\uD83D\uDEE1\uFE0F",
+  invest: "\uD83D\uDCB0",
   scan: "\uD83D\uDD0D",
   buy_service: "\uD83D\uDCB0",
   sell_service: "\uD83D\uDCC8",

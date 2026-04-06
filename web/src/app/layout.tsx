@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agentra — Agent Marketplace on X Layer",
+  title: "Sentinel — Security Oracle on X Layer",
   description:
-    "Autonomous AI agent marketplace with x402 micropayments and on-chain yield on X Layer.",
+    "Autonomous AI agents scan, analyze, and protect liquidity on X Layer.",
 };
 
 export default function RootLayout({
@@ -40,21 +40,9 @@ export default function RootLayout({
                   href="/"
                   className="text-xl font-bold text-emerald-400 tracking-tight"
                 >
-                  Agentra
+                  {"\uD83D\uDEE1\uFE0F"} Sentinel
                 </Link>
                 <div className="flex items-center gap-6">
-                  <Link
-                    href="/marketplace"
-                    className="text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    Marketplace
-                  </Link>
-                  <Link
-                    href="/dashboard"
-                    className="text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    Dashboard
-                  </Link>
                   <ConnectButton />
                 </div>
               </div>
