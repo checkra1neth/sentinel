@@ -14,7 +14,7 @@ interface Particle {
   pulseSpeed: number;
 }
 
-const COLORS = ["#6366f1", "#22d3ee", "#34d399", "#f59e0b", "#ef4444"];
+const COLORS = ["#8b5cf6", "#06b6d4", "#34d399", "#f59e0b", "#ef4444"];
 const CONNECTION_DIST = 120;
 const PARTICLE_COUNT = 80;
 const MOUSE_RADIUS = 150;
@@ -133,8 +133,8 @@ export function ParticleNetwork({ className }: { className?: string }): React.Re
       // Mouse glow
       if (mouse.x > 0 && mouse.y > 0) {
         const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, MOUSE_RADIUS);
-        gradient.addColorStop(0, "rgba(99, 102, 241, 0.06)");
-        gradient.addColorStop(1, "rgba(99, 102, 241, 0)");
+        gradient.addColorStop(0, "rgba(139, 92, 246, 0.06)");
+        gradient.addColorStop(1, "rgba(139, 92, 246, 0)");
         ctx.globalAlpha = 1;
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, w, h);

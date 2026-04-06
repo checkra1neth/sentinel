@@ -19,8 +19,8 @@ const VERDICT_COLORS: Record<string, string> = {
 };
 
 const NODE_COLORS = {
-  Scanner: "#22d3ee",
-  Analyst: "#6366f1",
+  Scanner: "#06b6d4",
+  Analyst: "#8b5cf6",
   Executor: "#34d399",
 };
 
@@ -120,17 +120,17 @@ export function PipelineFlow(): React.ReactNode {
     <div className="w-full max-w-[620px] mx-auto">
       <svg ref={svgRef} viewBox="0 0 600 200" className="w-full" style={{ overflow: "visible" }}>
         {/* Connection lines */}
-        <line x1={110} y1={100} x2={270} y2={100} stroke="#1a1d24" strokeWidth="1" strokeDasharray="4 4" />
-        <line x1={330} y1={100} x2={490} y2={100} stroke="#1a1d24" strokeWidth="1" strokeDasharray="4 4" />
+        <line x1={110} y1={100} x2={270} y2={100} stroke="#27272a" strokeWidth="1" strokeDasharray="4 4" />
+        <line x1={330} y1={100} x2={490} y2={100} stroke="#27272a" strokeWidth="1" strokeDasharray="4 4" />
 
         {/* Arrow indicators */}
-        <polygon points="265,96 275,100 265,104" fill="#1a1d24" />
-        <polygon points="485,96 495,100 485,104" fill="#1a1d24" />
+        <polygon points="265,96 275,100 265,104" fill="#27272a" />
+        <polygon points="485,96 495,100 485,104" fill="#27272a" />
 
         {/* VerdictRegistry line (from Analyst down) */}
-        <line x1={300} y1={130} x2={300} y2={170} stroke="#1a1d24" strokeWidth="1" strokeDasharray="3 3" />
-        <rect x={245} y={170} width={110} height={22} rx={4} fill="none" stroke="#1a1d24" strokeWidth="0.5" />
-        <text x={300} y={184} textAnchor="middle" fill="#7a7f8a" fontSize="8" opacity="0.4" fontFamily="monospace">VerdictRegistry</text>
+        <line x1={300} y1={130} x2={300} y2={170} stroke="#27272a" strokeWidth="1" strokeDasharray="3 3" />
+        <rect x={245} y={170} width={110} height={22} rx={4} fill="none" stroke="#27272a" strokeWidth="0.5" />
+        <text x={300} y={184} textAnchor="middle" fill="#a1a1aa" fontSize="8" opacity="0.4" fontFamily="monospace">VerdictRegistry</text>
 
         {/* Nodes */}
         {nodes.map((node) => (
@@ -145,7 +145,7 @@ export function PipelineFlow(): React.ReactNode {
             <text x={node.x} y={node.y - 32} textAnchor="middle" fill={node.color} fontSize="10" fontWeight="600" letterSpacing="0.1em">
               {node.label.toUpperCase()}
             </text>
-            <text x={node.x} y={node.y + 42} textAnchor="middle" fill="#7a7f8a" fontSize="9" opacity="0.4">
+            <text x={node.x} y={node.y + 42} textAnchor="middle" fill="#a1a1aa" fontSize="9" opacity="0.4">
               {node.sub}
             </text>
           </g>
@@ -154,7 +154,7 @@ export function PipelineFlow(): React.ReactNode {
         {/* Animated packets */}
         {packets.map((pkt) => {
           const x = getPacketX(pkt.phase);
-          const color = pkt.verdict ? VERDICT_COLORS[pkt.verdict] : "#7a7f8a";
+          const color = pkt.verdict ? VERDICT_COLORS[pkt.verdict] : "#a1a1aa";
           const showInvest = pkt.phase >= 3 && pkt.verdict === "SAFE";
           const rejected = pkt.phase >= 3 && pkt.verdict !== "SAFE" && pkt.verdict !== undefined;
 

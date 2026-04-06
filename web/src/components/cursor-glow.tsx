@@ -34,7 +34,7 @@ export function CursorGlow(): React.ReactNode {
         width: 400,
         height: 400,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(99,102,241,0.07) 0%, rgba(99,102,241,0.02) 40%, transparent 70%)",
+        background: "radial-gradient(circle, rgba(139,92,246,0.07) 0%, rgba(139,92,246,0.02) 40%, transparent 70%)",
         willChange: "transform",
       }}
     />

@@ -26,13 +26,13 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-[#08090d] text-[#e8eaed]">
+      <body className="min-h-full flex flex-col bg-[#09090b] text-[#fafafa]">
         <Providers>
-          <nav className="sticky top-0 z-50 bg-[#08090d]/90 backdrop-blur-sm">
+          <nav className="sticky top-0 z-50 bg-[#09090b]/90 backdrop-blur-sm">
             <div className="mx-auto max-w-[1400px] px-6 lg:px-10">
               <div className="flex h-14 items-center justify-between">
                 <div className="flex items-center gap-6">
@@ -47,7 +47,7 @@ export default function RootLayout({
               className="h-px"
               style={{
                 background:
-                  "linear-gradient(90deg, transparent, #1a1d24 20%, #6366f1 50%, #1a1d24 80%, transparent)",
+                  "linear-gradient(90deg, transparent, #27272a 20%, #8b5cf6 50%, #27272a 80%, transparent)",
               }}
             />
           </nav>

@@ -22,8 +22,8 @@ const ROLE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  Scanner: "#22d3ee",
-  Analyst: "#6366f1",
+  Scanner: "#06b6d4",
+  Analyst: "#8b5cf6",
   Executor: "#34d399",
 };
 
@@ -71,7 +71,7 @@ export function AgentPanel(): React.ReactNode {
       <div className="flex items-center flex-wrap gap-x-6 gap-y-2">
         {agents.map((agent, i) => {
           const Icon = ROLE_ICONS[agent.role] ?? Radar;
-          const color = ROLE_COLORS[agent.role] ?? "#7a7f8a";
+          const color = ROLE_COLORS[agent.role] ?? "#a1a1aa";
           const isActive =
             agent.status === "active" || agent.status === "running";
 
@@ -87,10 +87,10 @@ export function AgentPanel(): React.ReactNode {
                 >
                   {agent.role}
                 </span>
-                <span className="text-[11px] font-mono text-[#7a7f8a]/60">
+                <span className="text-[11px] font-mono text-[#a1a1aa]/60">
                   {truncateAddress(agent.address)}
                 </span>
-                <span className="text-[11px] font-mono text-[#7a7f8a]/40">
+                <span className="text-[11px] font-mono text-[#a1a1aa]/40">
                   {agent.balance} USDT
                 </span>
                 <span className="relative flex h-1.5 w-1.5 shrink-0">
@@ -103,7 +103,7 @@ export function AgentPanel(): React.ReactNode {
                   <span
                     className="relative inline-flex h-1.5 w-1.5 rounded-full"
                     style={{
-                      backgroundColor: isActive ? color : "#7a7f8a",
+                      backgroundColor: isActive ? color : "#a1a1aa",
                     }}
                   />
                 </span>
@@ -111,7 +111,7 @@ export function AgentPanel(): React.ReactNode {
 
               {/* Separator dot */}
               {i < agents.length - 1 && (
-                <span className="text-[#1a1d24] select-none hidden sm:inline">
+                <span className="text-[#27272a] select-none hidden sm:inline">
                   /
                 </span>
               )}

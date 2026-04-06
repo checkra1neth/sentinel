@@ -74,36 +74,36 @@ export function RadarSweep({ size = 280 }: { size?: number }): React.ReactNode {
           cy={r}
           r={r * scale - 1}
           fill="none"
-          stroke="#6366f1"
+          stroke="#8b5cf6"
           strokeWidth="0.5"
           opacity={0.1 + scale * 0.05}
         />
       ))}
 
       {/* Cross lines */}
-      <line x1={r} y1={0} x2={r} y2={size} stroke="#6366f1" strokeWidth="0.5" opacity="0.08" />
-      <line x1={0} y1={r} x2={size} y2={r} stroke="#6366f1" strokeWidth="0.5" opacity="0.08" />
-      <line x1={r - r * 0.7} y1={r - r * 0.7} x2={r + r * 0.7} y2={r + r * 0.7} stroke="#6366f1" strokeWidth="0.3" opacity="0.05" />
-      <line x1={r + r * 0.7} y1={r - r * 0.7} x2={r - r * 0.7} y2={r + r * 0.7} stroke="#6366f1" strokeWidth="0.3" opacity="0.05" />
+      <line x1={r} y1={0} x2={r} y2={size} stroke="#8b5cf6" strokeWidth="0.5" opacity="0.08" />
+      <line x1={0} y1={r} x2={size} y2={r} stroke="#8b5cf6" strokeWidth="0.5" opacity="0.08" />
+      <line x1={r - r * 0.7} y1={r - r * 0.7} x2={r + r * 0.7} y2={r + r * 0.7} stroke="#8b5cf6" strokeWidth="0.3" opacity="0.05" />
+      <line x1={r + r * 0.7} y1={r - r * 0.7} x2={r - r * 0.7} y2={r + r * 0.7} stroke="#8b5cf6" strokeWidth="0.3" opacity="0.05" />
 
       {/* Sweep beam */}
       <g ref={sweepRef}>
         <defs>
           <linearGradient id="sweep-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path
           d={`M ${r} ${r} L ${r} ${r * 0.05} A ${r * 0.95} ${r * 0.95} 0 0 1 ${r + r * 0.65} ${r - r * 0.68} Z`}
           fill="url(#sweep-grad)"
         />
-        <line x1={r} y1={r} x2={r} y2={r * 0.05} stroke="#6366f1" strokeWidth="1" opacity="0.5" />
+        <line x1={r} y1={r} x2={r} y2={r * 0.05} stroke="#8b5cf6" strokeWidth="1" opacity="0.5" />
       </g>
 
       {/* Center dot */}
-      <circle cx={r} cy={r} r="2" fill="#6366f1" opacity="0.8" />
-      <circle cx={r} cy={r} r="5" fill="none" stroke="#6366f1" strokeWidth="0.5" opacity="0.3" />
+      <circle cx={r} cy={r} r="2" fill="#8b5cf6" opacity="0.8" />
+      <circle cx={r} cy={r} r="5" fill="none" stroke="#8b5cf6" strokeWidth="0.5" opacity="0.3" />
 
       {/* Pings */}
       <g ref={pingsRef} />

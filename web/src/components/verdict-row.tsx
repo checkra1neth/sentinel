@@ -77,8 +77,8 @@ function formatCompact(value: number): string {
 function StatCell({ label, value, color }: { label: string; value: string; color?: string }): React.ReactNode {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-[0.12em] text-[#7a7f8a]/60">{label}</span>
-      <span className="text-xs font-mono tabular-nums" style={{ color: color ?? "#e8eaed" }}>{value}</span>
+      <span className="text-[10px] uppercase tracking-[0.12em] text-[#a1a1aa]/60">{label}</span>
+      <span className="text-xs font-mono tabular-nums" style={{ color: color ?? "#fafafa" }}>{value}</span>
     </div>
   );
 }
@@ -138,7 +138,7 @@ export const VerdictRow = forwardRef<
     <div ref={ref} className="group">
       {/* Main row */}
       <div
-        className="flex items-center gap-3 py-3 px-4 cursor-pointer transition-colors hover:bg-[#0f1116]/80"
+        className="flex items-center gap-3 py-3 px-4 cursor-pointer transition-colors hover:bg-[#18181b]/80"
         style={{ borderLeft: `3px solid ${color}` }}
         onClick={() => setExpanded((prev) => !prev)}
       >
@@ -152,17 +152,17 @@ export const VerdictRow = forwardRef<
 
         {/* Token info */}
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className="font-semibold text-[#e8eaed] text-sm">
+          <span className="font-semibold text-[#fafafa] text-sm">
             {verdict.tokenSymbol}
           </span>
-          <span className="text-[#7a7f8a]/50 text-xs hidden sm:inline truncate">
+          <span className="text-[#a1a1aa]/50 text-xs hidden sm:inline truncate">
             {verdict.tokenName !== verdict.tokenSymbol ? verdict.tokenName : ""}
           </span>
         </div>
 
         {/* Price + 24h change inline */}
         <div className="shrink-0 hidden sm:flex items-center gap-1.5">
-          <span className="text-xs font-mono tabular-nums text-[#e8eaed]">
+          <span className="text-xs font-mono tabular-nums text-[#fafafa]">
             {formatUsd(verdict.priceUsd)}
           </span>
           {change24 !== 0 && (
@@ -178,7 +178,7 @@ export const VerdictRow = forwardRef<
 
         {/* Risk score with inline bar */}
         <div className="shrink-0 flex items-center gap-2 w-24">
-          <div className="h-1 w-12 bg-[#1a1d24] rounded-full overflow-hidden">
+          <div className="h-1 w-12 bg-[#27272a] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
@@ -196,14 +196,14 @@ export const VerdictRow = forwardRef<
         </div>
 
         {/* Time ago */}
-        <span className="shrink-0 text-[11px] text-[#7a7f8a]/50 w-7 text-right tabular-nums">
+        <span className="shrink-0 text-[11px] text-[#a1a1aa]/50 w-7 text-right tabular-nums">
           {getTimeAgo(verdict.timestamp)}
         </span>
 
         {/* Expand indicator */}
         <ChevronDown
           ref={chevronRef}
-          className="h-3 w-3 text-[#7a7f8a]/30 shrink-0"
+          className="h-3 w-3 text-[#a1a1aa]/30 shrink-0"
         />
       </div>
 
@@ -219,19 +219,19 @@ export const VerdictRow = forwardRef<
         >
           {/* Row 1: all market stats inline */}
           <div className="flex items-baseline gap-x-5 gap-y-1 flex-wrap text-xs">
-            <span><span className="text-[#7a7f8a]/60">Price </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.priceUsd)}</span></span>
-            <span><span className="text-[#7a7f8a]/60">MCap </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.marketCap)}</span></span>
-            <span><span className="text-[#7a7f8a]/60">Liq </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.liquidityUsd)}</span></span>
+            <span><span className="text-[#a1a1aa]/60">Price </span><span className="font-mono tabular-nums text-[#fafafa]">{formatUsd(verdict.priceUsd)}</span></span>
+            <span><span className="text-[#a1a1aa]/60">MCap </span><span className="font-mono tabular-nums text-[#fafafa]">{formatUsd(verdict.marketCap)}</span></span>
+            <span><span className="text-[#a1a1aa]/60">Liq </span><span className="font-mono tabular-nums text-[#fafafa]">{formatUsd(verdict.liquidityUsd)}</span></span>
             {(verdict.volume24H ?? 0) > 0 && (
-              <span><span className="text-[#7a7f8a]/60">Vol </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatUsd(verdict.volume24H ?? 0)}</span></span>
+              <span><span className="text-[#a1a1aa]/60">Vol </span><span className="font-mono tabular-nums text-[#fafafa]">{formatUsd(verdict.volume24H ?? 0)}</span></span>
             )}
             {(verdict.holders ?? 0) > 0 && (
-              <span><span className="text-[#7a7f8a]/60">Holders </span><span className="font-mono tabular-nums text-[#e8eaed]">{formatCompact(verdict.holders ?? 0)}</span></span>
+              <span><span className="text-[#a1a1aa]/60">Holders </span><span className="font-mono tabular-nums text-[#fafafa]">{formatCompact(verdict.holders ?? 0)}</span></span>
             )}
             {verdict.holderConcentration > 0 && (
-              <span><span className="text-[#7a7f8a]/60">Top10 </span><span className="font-mono tabular-nums" style={{ color: verdict.holderConcentration > 30 ? "#f59e0b" : "#e8eaed" }}>{verdict.holderConcentration.toFixed(1)}%</span></span>
+              <span><span className="text-[#a1a1aa]/60">Top10 </span><span className="font-mono tabular-nums" style={{ color: verdict.holderConcentration > 30 ? "#f59e0b" : "#fafafa" }}>{verdict.holderConcentration.toFixed(1)}%</span></span>
             )}
-            <span><span className="text-[#7a7f8a]/60">Tax </span><span className="font-mono tabular-nums" style={{ color: verdict.buyTax > 5 || verdict.sellTax > 5 ? "#ef4444" : "#e8eaed" }}>{verdict.buyTax}/{verdict.sellTax}%</span></span>
+            <span><span className="text-[#a1a1aa]/60">Tax </span><span className="font-mono tabular-nums" style={{ color: verdict.buyTax > 5 || verdict.sellTax > 5 ? "#ef4444" : "#fafafa" }}>{verdict.buyTax}/{verdict.sellTax}%</span></span>
           </div>
 
           {/* Row 2: DeFi pool link */}
@@ -244,15 +244,15 @@ export const VerdictRow = forwardRef<
                 }
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-[#6366f1]/10 transition-colors"
-                style={{ backgroundColor: "rgba(99, 102, 241, 0.06)", border: "1px solid rgba(99, 102, 241, 0.12)" }}
+                className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-[#8b5cf6]/10 transition-colors"
+                style={{ backgroundColor: "rgba(139, 92, 246, 0.06)", border: "1px solid rgba(139, 92, 246, 0.12)" }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#6366f1]/70">{verdict.defiPool.platform}</span>
-                <span className="text-[#e8eaed]/80 font-mono">{verdict.defiPool.name}</span>
+                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#8b5cf6]/70">{verdict.defiPool.platform}</span>
+                <span className="text-[#fafafa]/80 font-mono">{verdict.defiPool.name}</span>
                 <span className="text-[#34d399] font-semibold tabular-nums">{(Number(verdict.defiPool.apr) * 100).toFixed(1)}%</span>
-                <span className="text-[#7a7f8a]/40 tabular-nums font-mono">{formatUsd(Number(verdict.defiPool.tvl))}</span>
-                <ExternalLink className="h-2.5 w-2.5 text-[#6366f1]/40" />
+                <span className="text-[#a1a1aa]/40 tabular-nums font-mono">{formatUsd(Number(verdict.defiPool.tvl))}</span>
+                <ExternalLink className="h-2.5 w-2.5 text-[#8b5cf6]/40" />
               </a>
             </div>
           )}
@@ -264,7 +264,7 @@ export const VerdictRow = forwardRef<
                 href={`https://www.oklink.com/xlayer/tx/${verdict.txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-[#6366f1]/60 hover:text-[#818cf8] transition-colors"
+                className="inline-flex items-center gap-1 text-[11px] text-[#8b5cf6]/60 hover:text-[#a78bfa] transition-colors"
               >
                 Tx <ExternalLink className="h-2.5 w-2.5" />
               </a>
@@ -273,7 +273,7 @@ export const VerdictRow = forwardRef<
               href={`https://www.oklink.com/xlayer/address/${verdict.token}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-[#6366f1]/60 hover:text-[#818cf8] transition-colors"
+              className="inline-flex items-center gap-1 text-[11px] text-[#8b5cf6]/60 hover:text-[#a78bfa] transition-colors"
             >
               Contract <ExternalLink className="h-2.5 w-2.5" />
             </a>
@@ -283,7 +283,7 @@ export const VerdictRow = forwardRef<
                   e.stopPropagation();
                   onScanAgain(verdict.token);
                 }}
-                className="inline-flex items-center gap-1 text-[11px] text-[#7a7f8a]/40 hover:text-[#e8eaed] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-[11px] text-[#a1a1aa]/40 hover:text-[#fafafa] transition-colors cursor-pointer"
               >
                 <RefreshCw className="h-2.5 w-2.5" />
                 Rescan
@@ -294,7 +294,7 @@ export const VerdictRow = forwardRef<
       </div>
 
       {/* Subtle separator */}
-      <div className="h-px bg-[#1a1d24]/30" />
+      <div className="h-px bg-[#27272a]/30" />
     </div>
   );
 });

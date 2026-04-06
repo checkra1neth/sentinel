@@ -240,10 +240,10 @@ export default function Home(): React.ReactNode {
       {/* Header - left aligned, compact */}
       <div ref={headerRef} className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-sm font-semibold uppercase tracking-[0.25em] text-[#e8eaed] mb-1">
+          <h1 className="text-sm font-semibold uppercase tracking-[0.25em] text-[#fafafa] mb-1">
             SENTINEL
           </h1>
-          <p className="text-xs text-[#7a7f8a]">
+          <p className="text-xs text-[#a1a1aa]">
             Autonomous Security Oracle
           </p>
         </div>
@@ -273,22 +273,22 @@ export default function Home(): React.ReactNode {
       {/* Threat feed */}
       <div className="mb-10">
         <div ref={feedTitleRef} className="flex items-center gap-2 mb-4">
-          <Eye className="h-3.5 w-3.5 text-[#7a7f8a]" />
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#7a7f8a]">
+          <Eye className="h-3.5 w-3.5 text-[#a1a1aa]" />
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#a1a1aa]">
             Threat Feed
           </h2>
-          <span className="text-[11px] text-[#7a7f8a]/40 tabular-nums">
+          <span className="text-[11px] text-[#a1a1aa]/40 tabular-nums">
             {verdicts.length}
           </span>
         </div>
 
         {verdicts.length === 0 ? (
-          <div className="py-16 text-center border border-[#1a1d24]/30 rounded-md">
-            <Shield className="h-8 w-8 text-[#1a1d24] mx-auto mb-4" />
-            <p className="text-sm text-[#7a7f8a]/60 mb-1">
+          <div className="py-16 text-center border border-[#27272a]/30 rounded-md">
+            <Shield className="h-8 w-8 text-[#27272a] mx-auto mb-4" />
+            <p className="text-sm text-[#a1a1aa]/60 mb-1">
               No verdicts yet
             </p>
-            <p className="text-xs text-[#7a7f8a]/30 max-w-sm mx-auto">
+            <p className="text-xs text-[#a1a1aa]/30 max-w-sm mx-auto">
               Enter a token address above to scan, or wait for the autonomous
               scanner to discover tokens.
             </p>
@@ -296,7 +296,7 @@ export default function Home(): React.ReactNode {
         ) : (
           <div
             ref={feedRef}
-            className="rounded-md border border-[#1a1d24]/50 overflow-hidden"
+            className="rounded-md border border-[#27272a]/50 overflow-hidden"
           >
             {verdicts.map((v, i) => (
               <VerdictRow
@@ -318,8 +318,8 @@ export default function Home(): React.ReactNode {
       {/* Agent activity */}
       <div ref={activityRef}>
         <div className="flex items-center gap-2 mb-4">
-          <Radio className="h-3.5 w-3.5 text-[#7a7f8a]" />
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#7a7f8a]">
+          <Radio className="h-3.5 w-3.5 text-[#a1a1aa]" />
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#a1a1aa]">
             Agent Activity
           </h2>
         </div>

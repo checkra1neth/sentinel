@@ -87,7 +87,7 @@ export function InlineStats({
     <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
       {stats.map((stat, i) => (
         <div key={stat.label} className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-[0.15em] text-[#7a7f8a]">
+          <span className="text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">
             {stat.label}
           </span>
           <span
@@ -95,18 +95,18 @@ export function InlineStats({
             style={stat.color ? { color: stat.color } : undefined}
           >
             {stat.prefix && (
-              <span className="text-sm text-[#7a7f8a]">{stat.prefix}</span>
+              <span className="text-sm text-[#a1a1aa]">{stat.prefix}</span>
             )}
             <span
               ref={setRef(i)}
               className="text-lg font-semibold tabular-nums"
-              style={stat.color ? { color: stat.color } : { color: "#e8eaed" }}
+              style={stat.color ? { color: stat.color } : { color: "#fafafa" }}
             >
               0
             </span>
           </span>
           {i < stats.length - 1 && (
-            <span className="text-[#1a1d24] ml-4 select-none hidden sm:inline">
+            <span className="text-[#27272a] ml-4 select-none hidden sm:inline">
               /
             </span>
           )}

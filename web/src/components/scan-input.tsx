@@ -49,10 +49,10 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
   return (
     <div className="mb-8">
       <div
-        className="flex items-center gap-2 rounded-lg border border-[#1a1d24] bg-[#0f1116] px-4 py-3
-                    focus-within:border-[#6366f1]/50 focus-within:ring-1 focus-within:ring-[#6366f1]/20 transition-all"
+        className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#18181b] px-4 py-3
+                    focus-within:border-[#8b5cf6]/50 focus-within:ring-1 focus-within:ring-[#8b5cf6]/20 transition-all"
       >
-        <Search size={16} className="text-[#7a7f8a] shrink-0" />
+        <Search size={16} className="text-[#a1a1aa] shrink-0" />
         <input
           type="text"
           value={address}
@@ -64,14 +64,14 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
             if (e.key === "Enter") handleScan();
           }}
           placeholder="Enter token address to scan..."
-          className="flex-1 bg-transparent text-[#e8eaed] font-mono text-sm placeholder:text-[#7a7f8a]/50
+          className="flex-1 bg-transparent text-[#fafafa] font-mono text-sm placeholder:text-[#a1a1aa]/50
                      outline-none"
         />
         <button
           onClick={handleScan}
           disabled={!address || loading}
-          className="shrink-0 flex items-center gap-2 rounded-md bg-[#6366f1] px-4 py-1.5 text-sm font-medium text-white
-                     hover:bg-[#5558e6] hover:shadow-[0_0_12px_rgba(99,102,241,0.3)] disabled:opacity-40
+          className="shrink-0 flex items-center gap-2 rounded-md bg-[#8b5cf6] px-4 py-1.5 text-sm font-medium text-white
+                     hover:bg-[#7c3aed] hover:shadow-[0_0_12px_rgba(139,92,246,0.3)] disabled:opacity-40
                      disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           {loading ? (
@@ -88,7 +88,7 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
       {/* Sample tokens for quick scanning */}
       {!address && !loading && (
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] text-[#7a7f8a]/40 uppercase tracking-wider">
+          <span className="text-[11px] text-[#a1a1aa]/40 uppercase tracking-wider">
             Try:
           </span>
           {[
@@ -100,8 +100,8 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
             <button
               key={sample.addr}
               onClick={() => prefill(sample.addr)}
-              className="rounded border border-[#1a1d24] bg-[#0f1116] px-2.5 py-1 text-[11px] text-[#7a7f8a]
-                         hover:border-[#6366f1]/40 hover:text-[#e8eaed] transition-all cursor-pointer"
+              className="rounded border border-[#27272a] bg-[#18181b] px-2.5 py-1 text-[11px] text-[#a1a1aa]
+                         hover:border-[#8b5cf6]/40 hover:text-[#fafafa] transition-all cursor-pointer"
             >
               {sample.label}
             </button>

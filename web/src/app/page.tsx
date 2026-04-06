@@ -206,8 +206,8 @@ export default function LandingPage(): React.ReactNode {
         ref={scanLineRef}
         className="pointer-events-none fixed left-0 right-0 h-px z-50"
         style={{
-          background: "linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.4) 30%, rgba(99,102,241,0.6) 50%, rgba(99,102,241,0.4) 70%, transparent 100%)",
-          boxShadow: "0 0 20px 4px rgba(99,102,241,0.15)",
+          background: "linear-gradient(90deg, transparent 0%, rgba(139,92,246,0.4) 30%, rgba(139,92,246,0.6) 50%, rgba(139,92,246,0.4) 70%, transparent 100%)",
+          boxShadow: "0 0 20px 4px rgba(139,92,246,0.15)",
           opacity: 0,
         }}
       />
@@ -227,21 +227,21 @@ export default function LandingPage(): React.ReactNode {
         <div className="relative max-w-[800px] text-center" style={{ perspective: "1000px" }}>
           <h1
             ref={heroTitleRef}
-            className="text-[clamp(2rem,6vw,4.5rem)] font-bold tracking-tight text-[#e8eaed] leading-[1.1] mb-2"
+            className="text-[clamp(2rem,6vw,4.5rem)] font-bold tracking-tight text-[#fafafa] leading-[1.1] mb-2"
           >
             Security you can verify.
           </h1>
           <h2
             ref={heroAccentRef}
             className="text-[clamp(2rem,6vw,4.5rem)] font-bold tracking-tight leading-[1.1] mb-8"
-            style={{ color: "#6366f1" }}
+            style={{ color: "#8b5cf6" }}
           >
             Convictions you can see.
           </h2>
 
           <p
             ref={taglineRef}
-            className="text-sm sm:text-base text-[#7a7f8a] max-w-md mx-auto mb-10 leading-relaxed"
+            className="text-sm sm:text-base text-[#a1a1aa] max-w-md mx-auto mb-10 leading-relaxed"
             style={{ opacity: 0 }}
           >
             Three AI agents. Autonomous scanning. On-chain verdicts.
@@ -251,7 +251,7 @@ export default function LandingPage(): React.ReactNode {
           <div ref={ctaRef} className="flex items-center justify-center gap-4 flex-wrap" style={{ opacity: 0 }}>
             <Link
               href="/feed"
-              className="group inline-flex items-center gap-2 rounded-lg bg-[#6366f1] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_50px_rgba(99,102,241,0.25)] transition-all duration-500"
+              className="group inline-flex items-center gap-2 rounded-lg bg-[#8b5cf6] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#7c3aed] hover:shadow-[0_0_50px_rgba(139,92,246,0.25)] transition-all duration-500"
             >
               Enter App
               <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300" />
@@ -260,7 +260,7 @@ export default function LandingPage(): React.ReactNode {
               href="https://github.com/checkra1neth/sentinel"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-[#1a1d24] bg-[#08090d]/50 backdrop-blur-sm px-8 py-3.5 text-sm font-medium text-[#7a7f8a] hover:text-[#e8eaed] hover:border-[#6366f1]/20 transition-all duration-500"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#09090b]/50 backdrop-blur-sm px-8 py-3.5 text-sm font-medium text-[#a1a1aa] hover:text-[#fafafa] hover:border-[#8b5cf6]/20 transition-all duration-500"
             >
               Source
               <ExternalLink className="h-3.5 w-3.5" />
@@ -270,8 +270,8 @@ export default function LandingPage(): React.ReactNode {
 
         {/* Scroll cue */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-30">
-          <div className="w-5 h-8 rounded-full border border-[#7a7f8a]/30 flex items-start justify-center p-1.5">
-            <div className="w-0.5 h-1.5 bg-[#7a7f8a]/50 rounded-full animate-bounce" />
+          <div className="w-5 h-8 rounded-full border border-[#a1a1aa]/30 flex items-start justify-center p-1.5">
+            <div className="w-0.5 h-1.5 bg-[#a1a1aa]/50 rounded-full animate-bounce" />
           </div>
         </div>
       </section>
@@ -281,12 +281,12 @@ export default function LandingPage(): React.ReactNode {
         <div className="max-w-[700px] mx-auto">
           <h2
             ref={s2TitleRef}
-            className="text-2xl sm:text-3xl lg:text-[2.5rem] font-bold text-[#e8eaed] leading-[1.2] mb-8"
+            className="text-2xl sm:text-3xl lg:text-[2.5rem] font-bold text-[#fafafa] leading-[1.2] mb-8"
           >
             Most security tools grade tokens then walk away.
             Sentinel grades them, then bets its own money on the result.
           </h2>
-          <p className="text-sm text-[#7a7f8a]/60 leading-relaxed max-w-lg">
+          <p className="text-sm text-[#a1a1aa]/60 leading-relaxed max-w-lg">
             If the analysis is wrong, the agent loses capital.
             If it is right, the agent earns LP fees.
             Aligned incentives. No subscription. No trust required.
@@ -298,13 +298,13 @@ export default function LandingPage(): React.ReactNode {
       <section id="live-stats" className="py-24 px-6">
         <div className="max-w-[1400px] mx-auto flex justify-center gap-12 sm:gap-24">
           {[
-            { label: "Scanned", value: counters.scanned, color: "#e8eaed" },
+            { label: "Scanned", value: counters.scanned, color: "#fafafa" },
             { label: "Safe", value: counters.safe, color: "#34d399" },
             { label: "Threats", value: counters.threats, color: "#ef4444" },
           ].map((s) => (
             <div key={s.label} className="text-center">
               <div className="text-4xl sm:text-6xl lg:text-7xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
-              <div className="text-[9px] uppercase tracking-[0.3em] text-[#7a7f8a]/30 mt-3">{s.label}</div>
+              <div className="text-[9px] uppercase tracking-[0.3em] text-[#a1a1aa]/30 mt-3">{s.label}</div>
             </div>
           ))}
         </div>
@@ -312,18 +312,18 @@ export default function LandingPage(): React.ReactNode {
 
       {/* ═══ AGENTS ═══ */}
       <section className="py-24 px-6">
-        <div ref={s3Ref} className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-px bg-[#1a1d24]/20 rounded-xl overflow-hidden">
+        <div ref={s3Ref} className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-px bg-[#27272a]/20 rounded-xl overflow-hidden">
           {[
             {
               name: "SCANNER",
-              accent: "#22d3ee",
+              accent: "#06b6d4",
               number: "01",
               headline: "See everything",
               body: "Queries 4 OKX data sources every 5 minutes. New token launches, migrated pairs, smart money moves, trending assets. Nothing escapes the scan.",
             },
             {
               name: "ANALYST",
-              accent: "#6366f1",
+              accent: "#8b5cf6",
               number: "02",
               headline: "Trust nothing",
               body: "7 independent risk signals: honeypot detection, tax analysis, holder concentration, rug history, bytecode inspection, liquidity depth, price volatility.",
@@ -339,7 +339,7 @@ export default function LandingPage(): React.ReactNode {
             <div
               key={agent.name}
               data-agent
-              className="relative bg-[#08090d] p-8 sm:p-10 flex flex-col"
+              className="relative bg-[#09090b] p-8 sm:p-10 flex flex-col"
               style={{ opacity: 0 }}
             >
               <span className="text-6xl font-bold tabular-nums absolute top-6 right-8" style={{ color: agent.accent, opacity: 0.06 }}>
@@ -348,8 +348,8 @@ export default function LandingPage(): React.ReactNode {
               <span className="text-[10px] font-semibold uppercase tracking-[0.3em] mb-6" style={{ color: agent.accent }}>
                 {agent.name}
               </span>
-              <h3 className="text-xl sm:text-2xl font-bold text-[#e8eaed] mb-4 leading-tight">{agent.headline}</h3>
-              <p className="text-sm text-[#7a7f8a]/60 leading-relaxed">{agent.body}</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-[#fafafa] mb-4 leading-tight">{agent.headline}</h3>
+              <p className="text-sm text-[#a1a1aa]/60 leading-relaxed">{agent.body}</p>
               <div className="mt-auto pt-8">
                 <div className="h-px w-full" style={{ background: `linear-gradient(90deg, ${agent.accent}30, transparent)` }} />
               </div>
@@ -362,16 +362,16 @@ export default function LandingPage(): React.ReactNode {
       <section className="py-32 px-6 text-center">
         <h2
           ref={outroTitleRef}
-          className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#e8eaed] mb-6"
+          className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#fafafa] mb-6"
         >
           See it live
         </h2>
-        <p className="text-sm text-[#7a7f8a]/50 mb-10 max-w-md mx-auto">
+        <p className="text-sm text-[#a1a1aa]/50 mb-10 max-w-md mx-auto">
           Every verdict on-chain. Every position real. All code open-source.
         </p>
         <Link
           href="/feed"
-          className="group inline-flex items-center gap-2 rounded-lg bg-[#6366f1] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_50px_rgba(99,102,241,0.25)] transition-all duration-500"
+          className="group inline-flex items-center gap-2 rounded-lg bg-[#8b5cf6] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#7c3aed] hover:shadow-[0_0_50px_rgba(139,92,246,0.25)] transition-all duration-500"
         >
           Open Threat Feed
           <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300" />
@@ -379,7 +379,7 @@ export default function LandingPage(): React.ReactNode {
 
         <div className="mt-16 flex flex-wrap justify-center gap-2 max-w-xl mx-auto">
           {["OKX OnchainOS", "Agentic Wallets", "22 AI Skills", "x402", "VerdictRegistry", "X Layer", "Uniswap V3/V4"].map((t) => (
-            <span key={t} className="rounded-full border border-[#1a1d24]/20 px-3 py-1 text-[10px] text-[#7a7f8a]/30">{t}</span>
+            <span key={t} className="rounded-full border border-[#27272a]/20 px-3 py-1 text-[10px] text-[#a1a1aa]/30">{t}</span>
           ))}
         </div>
       </section>

@@ -38,7 +38,7 @@ export function AuroraBg(): React.ReactNode {
       const w = canvas.width;
       const h = canvas.height;
 
-      ctx.fillStyle = "#08090d";
+      ctx.fillStyle = "#09090b";
       ctx.fillRect(0, 0, w, h);
 
       for (const orb of orbs) {
