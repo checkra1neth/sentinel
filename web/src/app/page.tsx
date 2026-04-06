@@ -8,6 +8,8 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 import { CustomEase } from "gsap/CustomEase";
 import Lenis from "lenis";
+import { AuroraBg } from "../components/aurora-bg";
+import { CursorGlow } from "../components/cursor-glow";
 import { ParticleNetwork } from "../components/particle-network";
 import { RadarSweep } from "../components/radar-sweep";
 
@@ -15,23 +17,18 @@ gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
-interface Stats {
-  totalScanned: number;
-  totalSafe: number;
-  totalCaution: number;
-  totalDangerous: number;
-}
+interface Stats { totalScanned: number; totalSafe: number; totalDangerous: number }
 
 export default function LandingPage(): React.ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
-  const headlineRef = useRef<HTMLHeadingElement>(null);
+  const heroTitleRef = useRef<HTMLHeadingElement>(null);
+  const heroAccentRef = useRef<HTMLHeadingElement>(null);
   const taglineRef = useRef<HTMLParagraphElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
-  const statsRef = useRef<HTMLDivElement>(null);
-  const horizontalRef = useRef<HTMLDivElement>(null);
-  const horizontalInnerRef = useRef<HTMLDivElement>(null);
-  const stackRef = useRef<HTMLDivElement>(null);
-  const outroRef = useRef<HTMLDivElement>(null);
+  const scanLineRef = useRef<HTMLDivElement>(null);
+  const s2TitleRef = useRef<HTMLHeadingElement>(null);
+  const s3Ref = useRef<HTMLDivElement>(null);
+  const outroTitleRef = useRef<HTMLHeadingElement>(null);
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [counters, setCounters] = useState({ scanned: 0, safe: 0, threats: 0 });
@@ -45,23 +42,19 @@ export default function LandingPage(): React.ReactNode {
       }
     } catch { /* */ }
   }, []);
-
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  // Lenis smooth scroll
+  // Lenis
   useEffect(() => {
-    const lenis = new Lenis({ lerp: 0.08, smoothWheel: true });
-    const raf = (time: number): void => {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    };
+    const lenis = new Lenis({ lerp: 0.07, smoothWheel: true });
+    const raf = (time: number): void => { lenis.raf(time); requestAnimationFrame(raf); };
     requestAnimationFrame(raf);
     lenis.on("scroll", ScrollTrigger.update);
     gsap.ticker.lagSmoothing(0);
     return () => lenis.destroy();
   }, []);
 
-  // GSAP animations
+  // All GSAP
   useEffect(() => {
     if (typeof window === "undefined") return;
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -70,106 +63,127 @@ export default function LandingPage(): React.ReactNode {
     CustomEase.create("sentinel", "M0,0 C0.14,0 0.242,0.438 0.272,0.561 0.313,0.728 0.354,0.963 0.362,1 0.37,0.985 0.45,1 1,1");
 
     const ctx = gsap.context(() => {
-      // ── Headline: SplitText scramble-like reveal ──
-      if (headlineRef.current) {
-        const split = new SplitText(headlineRef.current, { type: "chars,words,lines" });
-        gsap.set(split.chars, { opacity: 0, y: 60, rotationX: -90, transformOrigin: "50% 50% -20px" });
+      // ── Hero title: 3D char reveal ──
+      if (heroTitleRef.current) {
+        const split = new SplitText(heroTitleRef.current, { type: "chars" });
+        gsap.set(split.chars, { opacity: 0, y: 80, rotationX: -90, transformOrigin: "50% 100%" });
         gsap.to(split.chars, {
           opacity: 1, y: 0, rotationX: 0,
-          duration: 0.8, stagger: { each: 0.02, from: "start" },
-          ease: "sentinel", delay: 0.4,
+          duration: 0.9, stagger: { each: 0.025, from: "start" },
+          ease: "sentinel", delay: 0.3,
         });
       }
 
-      // ── Tagline wipe-in ──
+      // ── Accent line: wipe ──
+      if (heroAccentRef.current) {
+        const split2 = new SplitText(heroAccentRef.current, { type: "chars" });
+        gsap.set(split2.chars, { opacity: 0, y: 40, scale: 0.5 });
+        gsap.to(split2.chars, {
+          opacity: 1, y: 0, scale: 1,
+          duration: 0.6, stagger: { each: 0.02, from: "center" },
+          ease: "back.out(2)", delay: 1.0,
+        });
+      }
+
+      // ── Tagline ──
       if (taglineRef.current) {
         gsap.fromTo(taglineRef.current,
-          { clipPath: "inset(0 100% 0 0)", opacity: 0 },
-          { clipPath: "inset(0 0% 0 0)", opacity: 1, duration: 1, ease: "power3.out", delay: 1.4 }
+          { opacity: 0, y: 20, filter: "blur(8px)" },
+          { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.8, ease: "power2.out", delay: 1.6 }
         );
       }
 
       // ── CTA ──
       if (ctaRef.current) {
         gsap.fromTo(ctaRef.current,
-          { opacity: 0, y: 30 },
-          { opacity: 1, y: 0, duration: 0.6, ease: "power2.out", delay: 1.8 }
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", delay: 2.0 }
         );
       }
 
-      // ── Stats counter on scroll ──
-      if (statsRef.current && stats) {
+      // ── Scan line sweep (repeating) ──
+      if (scanLineRef.current) {
+        gsap.set(scanLineRef.current, { y: "-10vh", opacity: 0 });
+        gsap.to(scanLineRef.current, {
+          y: "110vh", opacity: 1, duration: 3, ease: "none",
+          repeat: -1, repeatDelay: 4, delay: 2.5,
+          onRepeat: () => { gsap.set(scanLineRef.current, { y: "-10vh" }); },
+        });
+      }
+
+      // ── Section 2 title reveal on scroll ──
+      if (s2TitleRef.current) {
+        const s2split = new SplitText(s2TitleRef.current, { type: "lines" });
+        gsap.set(s2split.lines, { opacity: 0, y: 50, clipPath: "inset(0 0 100% 0)" });
         ScrollTrigger.create({
-          trigger: statsRef.current,
-          start: "top 80%",
+          trigger: s2TitleRef.current,
+          start: "top 75%",
           once: true,
           onEnter: () => {
-            [
-              { key: "scanned" as const, val: stats.totalScanned },
-              { key: "safe" as const, val: stats.totalSafe },
-              { key: "threats" as const, val: stats.totalDangerous },
-            ].forEach(({ key, val }) => {
-              const o = { v: 0 };
-              gsap.to(o, {
-                v: val, duration: 2, ease: "power2.out", snap: { v: 1 },
-                onUpdate: () => setCounters((p) => ({ ...p, [key]: Math.round(o.v) })),
-              });
+            gsap.to(s2split.lines, {
+              opacity: 1, y: 0, clipPath: "inset(0 0 0% 0)",
+              duration: 0.8, stagger: 0.15, ease: "power3.out",
             });
           },
         });
-
-        gsap.fromTo(statsRef.current,
-          { opacity: 0, y: 50 },
-          {
-            opacity: 1, y: 0, duration: 0.8, ease: "power2.out",
-            scrollTrigger: { trigger: statsRef.current, start: "top 85%" },
-          }
-        );
       }
 
-      // ── Horizontal scroll section ──
-      if (horizontalRef.current && horizontalInnerRef.current) {
-        const inner = horizontalInnerRef.current;
-        const totalWidth = inner.scrollWidth - window.innerWidth;
-
-        gsap.to(inner, {
-          x: -totalWidth,
-          ease: "none",
-          scrollTrigger: {
-            trigger: horizontalRef.current,
-            start: "top top",
-            end: () => `+=${totalWidth}`,
-            scrub: 1,
-            pin: true,
-            anticipatePin: 1,
-          },
-        });
-      }
-
-      // ── Stack cards parallax ──
-      if (stackRef.current) {
-        const cards = stackRef.current.querySelectorAll("[data-stack]");
-        cards.forEach((card, i) => {
+      // ── Section 3 cards ──
+      if (s3Ref.current) {
+        const cards = s3Ref.current.querySelectorAll("[data-agent]");
+        cards.forEach((card) => {
           gsap.fromTo(card,
-            { opacity: 0, y: 100, scale: 0.85, rotationX: 10 },
+            { opacity: 0, y: 80, scale: 0.92 },
             {
-              opacity: 1, y: 0, scale: 1, rotationX: 0,
+              opacity: 1, y: 0, scale: 1,
               duration: 0.8, ease: "sentinel",
-              scrollTrigger: { trigger: card, start: "top 90%", end: "top 40%", scrub: 1 },
+              scrollTrigger: { trigger: card, start: "top 85%" },
             }
           );
         });
       }
 
+      // ── Stats counter ──
+      if (stats) {
+        const statsEl = document.getElementById("live-stats");
+        if (statsEl) {
+          ScrollTrigger.create({
+            trigger: statsEl,
+            start: "top 80%",
+            once: true,
+            onEnter: () => {
+              [
+                { key: "scanned" as const, val: stats.totalScanned },
+                { key: "safe" as const, val: stats.totalSafe },
+                { key: "threats" as const, val: stats.totalDangerous },
+              ].forEach(({ key, val }) => {
+                const o = { v: 0 };
+                gsap.to(o, {
+                  v: val, duration: 2, ease: "power2.out", snap: { v: 1 },
+                  onUpdate: () => setCounters((p) => ({ ...p, [key]: Math.round(o.v) })),
+                });
+              });
+            },
+          });
+        }
+      }
+
       // ── Outro ──
-      if (outroRef.current) {
-        gsap.fromTo(outroRef.current,
-          { opacity: 0, scale: 0.9 },
-          {
-            opacity: 1, scale: 1, duration: 1, ease: "power2.out",
-            scrollTrigger: { trigger: outroRef.current, start: "top 80%" },
-          }
-        );
+      if (outroTitleRef.current) {
+        const outSplit = new SplitText(outroTitleRef.current, { type: "chars" });
+        gsap.set(outSplit.chars, { opacity: 0, scale: 0 });
+        ScrollTrigger.create({
+          trigger: outroTitleRef.current,
+          start: "top 80%",
+          once: true,
+          onEnter: () => {
+            gsap.to(outSplit.chars, {
+              opacity: 1, scale: 1,
+              duration: 0.4, stagger: { each: 0.02, from: "random" },
+              ease: "back.out(3)",
+            });
+          },
+        });
       }
     }, containerRef);
 
@@ -177,55 +191,76 @@ export default function LandingPage(): React.ReactNode {
   }, [stats]);
 
   return (
-    <div ref={containerRef}>
-      {/* ═══════════════ HERO ═══════════════ */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Particle canvas background */}
-        <div className="absolute inset-0 -z-10">
-          <ParticleNetwork className="absolute inset-0" />
+    <div ref={containerRef} className="relative">
+      <AuroraBg />
+      <CursorGlow />
+
+      {/* Noise overlay */}
+      <div className="pointer-events-none fixed inset-0 -z-10 opacity-[0.03]" style={{
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        backgroundRepeat: "repeat",
+      }} />
+
+      {/* Scan line */}
+      <div
+        ref={scanLineRef}
+        className="pointer-events-none fixed left-0 right-0 h-px z-50"
+        style={{
+          background: "linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.4) 30%, rgba(99,102,241,0.6) 50%, rgba(99,102,241,0.4) 70%, transparent 100%)",
+          boxShadow: "0 0 20px 4px rgba(99,102,241,0.15)",
+          opacity: 0,
+        }}
+      />
+
+      {/* ═══ HERO ═══ */}
+      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden px-6">
+        {/* Particle bg — hero only */}
+        <div className="absolute inset-0 -z-10 opacity-40">
+          <ParticleNetwork />
         </div>
 
-        {/* Vignette overlay */}
-        <div className="absolute inset-0 -z-10 pointer-events-none" style={{
-          background: "radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, #08090d 100%)",
-        }} />
+        {/* Radar — absolute, background visual */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 opacity-20">
+          <RadarSweep size={500} />
+        </div>
 
-        <div className="relative z-10 text-center px-6 max-w-[900px]">
-          {/* Radar */}
-          <div className="flex justify-center mb-8">
-            <RadarSweep size={200} />
-          </div>
-
+        <div className="relative max-w-[800px] text-center" style={{ perspective: "1000px" }}>
           <h1
-            ref={headlineRef}
-            className="text-3xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-tight text-[#e8eaed] leading-[1.15] mb-6"
-            style={{ perspective: "800px" }}
+            ref={heroTitleRef}
+            className="text-[clamp(2rem,6vw,4.5rem)] font-bold tracking-tight text-[#e8eaed] leading-[1.1] mb-2"
           >
-            Sentinel puts its money on what&apos;s safe
+            Security you can verify.
           </h1>
+          <h2
+            ref={heroAccentRef}
+            className="text-[clamp(2rem,6vw,4.5rem)] font-bold tracking-tight leading-[1.1] mb-8"
+            style={{ color: "#6366f1" }}
+          >
+            Convictions you can see.
+          </h2>
 
           <p
             ref={taglineRef}
-            className="text-base lg:text-lg text-[#7a7f8a] max-w-xl mx-auto mb-10 leading-relaxed"
+            className="text-sm sm:text-base text-[#7a7f8a] max-w-md mx-auto mb-10 leading-relaxed"
             style={{ opacity: 0 }}
           >
-            Autonomous AI agents that scan, analyze, and invest on X Layer.
-            Every verdict is on-chain. Every position is real.
+            Three AI agents. Autonomous scanning. On-chain verdicts.
+            LP positions on every SAFE token. X Layer.
           </p>
 
           <div ref={ctaRef} className="flex items-center justify-center gap-4 flex-wrap" style={{ opacity: 0 }}>
             <Link
               href="/feed"
-              className="group inline-flex items-center gap-2 rounded-md bg-[#6366f1] px-7 py-3 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_40px_rgba(99,102,241,0.3)] transition-all duration-300"
+              className="group inline-flex items-center gap-2 rounded-lg bg-[#6366f1] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_50px_rgba(99,102,241,0.25)] transition-all duration-500"
             >
               Enter App
-              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-200" />
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300" />
             </Link>
             <a
               href="https://github.com/checkra1neth/sentinel"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-[#1a1d24] px-7 py-3 text-sm font-medium text-[#7a7f8a] hover:text-[#e8eaed] hover:border-[#6366f1]/20 transition-all duration-300"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#1a1d24] bg-[#08090d]/50 backdrop-blur-sm px-8 py-3.5 text-sm font-medium text-[#7a7f8a] hover:text-[#e8eaed] hover:border-[#6366f1]/20 transition-all duration-500"
             >
               Source
               <ExternalLink className="h-3.5 w-3.5" />
@@ -233,149 +268,118 @@ export default function LandingPage(): React.ReactNode {
           </div>
         </div>
 
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-          <span className="text-[10px] uppercase tracking-[0.3em] text-[#7a7f8a]/30">Scroll</span>
-          <div className="w-px h-8 bg-gradient-to-b from-[#6366f1]/40 to-transparent" />
-        </div>
-      </section>
-
-      {/* ═══════════════ LIVE STATS ═══════════════ */}
-      <section ref={statsRef} className="py-24 px-6" style={{ opacity: 0 }}>
-        <div className="max-w-[1400px] mx-auto">
-          <div className="flex justify-center gap-10 sm:gap-20">
-            {[
-              { label: "Scanned", value: counters.scanned, color: "#e8eaed" },
-              { label: "Verified Safe", value: counters.safe, color: "#34d399" },
-              { label: "Threats Found", value: counters.threats, color: "#ef4444" },
-            ].map((s) => (
-              <div key={s.label} className="text-center">
-                <div className="text-4xl lg:text-6xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
-                <div className="text-[10px] uppercase tracking-[0.25em] text-[#7a7f8a]/40 mt-2">{s.label}</div>
-              </div>
-            ))}
+        {/* Scroll cue */}
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-30">
+          <div className="w-5 h-8 rounded-full border border-[#7a7f8a]/30 flex items-start justify-center p-1.5">
+            <div className="w-0.5 h-1.5 bg-[#7a7f8a]/50 rounded-full animate-bounce" />
           </div>
         </div>
       </section>
 
-      {/* ═══════════════ HORIZONTAL SCROLL — HOW IT WORKS ═══════════════ */}
-      <section ref={horizontalRef} className="relative overflow-hidden">
-        <div ref={horizontalInnerRef} className="flex items-center gap-0 h-screen" style={{ width: "fit-content" }}>
-          {/* Title panel */}
-          <div className="shrink-0 w-screen h-screen flex items-center justify-center px-6">
-            <div className="max-w-md">
-              <span className="text-[10px] uppercase tracking-[0.3em] text-[#6366f1]/50 mb-4 block">Pipeline</span>
-              <h2 className="text-3xl lg:text-4xl font-bold text-[#e8eaed] leading-tight">
-                Five steps from discovery to profit
-              </h2>
-            </div>
-          </div>
+      {/* ═══ SECTION 2 — THE THESIS ═══ */}
+      <section className="py-32 px-6">
+        <div className="max-w-[700px] mx-auto">
+          <h2
+            ref={s2TitleRef}
+            className="text-2xl sm:text-3xl lg:text-[2.5rem] font-bold text-[#e8eaed] leading-[1.2] mb-8"
+          >
+            Most security tools grade tokens then walk away.
+            Sentinel grades them, then bets its own money on the result.
+          </h2>
+          <p className="text-sm text-[#7a7f8a]/60 leading-relaxed max-w-lg">
+            If the analysis is wrong, the agent loses capital.
+            If it is right, the agent earns LP fees.
+            Aligned incentives. No subscription. No trust required.
+          </p>
+        </div>
+      </section>
 
-          {/* Step panels */}
+      {/* ═══ LIVE NUMBERS ═══ */}
+      <section id="live-stats" className="py-24 px-6">
+        <div className="max-w-[1400px] mx-auto flex justify-center gap-12 sm:gap-24">
           {[
-            { n: "01", title: "Discover", desc: "Scanner agent queries OKX dex-trenches, smart money signals, and hot tokens every 5 minutes. 59+ tokens discovered autonomously.", color: "#22d3ee" },
-            { n: "02", title: "Analyze", desc: "Analyst performs deep scan from 7 data sources. OKX security, risk levels, holder analysis, bytecode probe, liquidity, price action, community.", color: "#6366f1" },
-            { n: "03", title: "Verdict", desc: "Risk score 0-100 calculated. SAFE / CAUTION / DANGEROUS. Published on-chain to VerdictRegistry smart contract. Immutable.", color: "#f59e0b" },
-            { n: "04", title: "Invest", desc: "Executor finds Uniswap LP pool via OKX DeFi skill. Invests with risk-based range: low risk = wide ±20%, high risk = tight ±3%.", color: "#34d399" },
-            { n: "05", title: "Compound", desc: "LP fees earned. Agents pay each other via x402 protocol. Self-funding security oracle that gets smarter and richer.", color: "#34d399" },
-          ].map((step) => (
-            <div key={step.n} className="shrink-0 w-[400px] h-screen flex items-center px-8">
-              <div>
-                <span className="text-5xl font-bold tabular-nums block mb-4" style={{ color: step.color, opacity: 0.15 }}>
-                  {step.n}
-                </span>
-                <h3 className="text-xl font-bold text-[#e8eaed] mb-3">{step.title}</h3>
-                <p className="text-sm text-[#7a7f8a] leading-relaxed">{step.desc}</p>
-                <div className="mt-4 h-px w-16" style={{ backgroundColor: step.color, opacity: 0.3 }} />
-              </div>
+            { label: "Scanned", value: counters.scanned, color: "#e8eaed" },
+            { label: "Safe", value: counters.safe, color: "#34d399" },
+            { label: "Threats", value: counters.threats, color: "#ef4444" },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <div className="text-4xl sm:text-6xl lg:text-7xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
+              <div className="text-[9px] uppercase tracking-[0.3em] text-[#7a7f8a]/30 mt-3">{s.label}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ═══════════════ AGENT STACK ═══════════════ */}
+      {/* ═══ AGENTS ═══ */}
       <section className="py-24 px-6">
-        <div ref={stackRef} className="max-w-[1400px] mx-auto space-y-6">
+        <div ref={s3Ref} className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-px bg-[#1a1d24]/20 rounded-xl overflow-hidden">
           {[
             {
-              name: "Scanner",
-              color: "#22d3ee",
-              skills: ["dex-trenches", "dex-signal", "dex-token", "dex-market"],
-              desc: "Token discovery across 4 sources. Deduplication. Already-scanned filtering. Autonomous 5-minute loop.",
-              stat: "59+ tokens",
+              name: "SCANNER",
+              accent: "#22d3ee",
+              number: "01",
+              headline: "See everything",
+              body: "Queries 4 OKX data sources every 5 minutes. New token launches, migrated pairs, smart money moves, trending assets. Nothing escapes the scan.",
             },
             {
-              name: "Analyst",
-              color: "#6366f1",
-              skills: ["security", "dex-token", "memepump", "onchain-gateway", "defi-invest"],
-              desc: "7-source security analysis. On-chain verdict publishing. DeFi pool discovery with APR data.",
-              stat: "7 risk categories",
+              name: "ANALYST",
+              accent: "#6366f1",
+              number: "02",
+              headline: "Trust nothing",
+              body: "7 independent risk signals: honeypot detection, tax analysis, holder concentration, rug history, bytecode inspection, liquidity depth, price volatility.",
             },
             {
-              name: "Executor",
-              color: "#34d399",
-              skills: ["defi-invest", "defi-portfolio", "dex-swap", "liquidity-planner"],
-              desc: "Uniswap LP investment with risk-based range sizing. Position tracking. Self-funding via LP fees.",
-              stat: "Risk-based LP",
+              name: "EXECUTOR",
+              accent: "#34d399",
+              number: "03",
+              headline: "Back your words",
+              body: "Every SAFE verdict gets capital behind it. Uniswap LP with risk-proportional range. The wider the range, the deeper the conviction.",
             },
           ].map((agent) => (
             <div
               key={agent.name}
-              data-stack
-              className="rounded-lg border border-[#1a1d24]/30 p-8 flex flex-col sm:flex-row items-start gap-6"
+              data-agent
+              className="relative bg-[#08090d] p-8 sm:p-10 flex flex-col"
               style={{ opacity: 0 }}
             >
-              <div className="shrink-0 w-20 pt-1">
-                <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: agent.color }}>
-                  {agent.name}
-                </span>
-                <div className="mt-2 text-[10px] font-mono text-[#7a7f8a]/30">{agent.stat}</div>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-[#7a7f8a] leading-relaxed mb-3">{agent.desc}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {agent.skills.map((s) => (
-                    <span key={s} className="rounded-full border border-[#1a1d24]/30 px-2.5 py-0.5 text-[10px] text-[#7a7f8a]/40">
-                      {s}
-                    </span>
-                  ))}
-                </div>
+              <span className="text-6xl font-bold tabular-nums absolute top-6 right-8" style={{ color: agent.accent, opacity: 0.06 }}>
+                {agent.number}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] mb-6" style={{ color: agent.accent }}>
+                {agent.name}
+              </span>
+              <h3 className="text-xl sm:text-2xl font-bold text-[#e8eaed] mb-4 leading-tight">{agent.headline}</h3>
+              <p className="text-sm text-[#7a7f8a]/60 leading-relaxed">{agent.body}</p>
+              <div className="mt-auto pt-8">
+                <div className="h-px w-full" style={{ background: `linear-gradient(90deg, ${agent.accent}30, transparent)` }} />
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ═══════════════ OUTRO CTA ═══════════════ */}
-      <section ref={outroRef} className="py-32 px-6 text-center" style={{ opacity: 0 }}>
-        <div className="max-w-lg mx-auto">
-          <h2 className="text-2xl lg:text-3xl font-bold text-[#e8eaed] mb-4">
-            See it live
-          </h2>
-          <p className="text-sm text-[#7a7f8a] mb-8">
-            Every verdict on-chain. Every LP position real. Open-source.
-          </p>
-          <Link
-            href="/feed"
-            className="group inline-flex items-center gap-2 rounded-md bg-[#6366f1] px-8 py-3 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_40px_rgba(99,102,241,0.3)] transition-all duration-300"
-          >
-            Open Threat Feed
-            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-200" />
-          </Link>
-        </div>
+      {/* ═══ OUTRO ═══ */}
+      <section className="py-32 px-6 text-center">
+        <h2
+          ref={outroTitleRef}
+          className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#e8eaed] mb-6"
+        >
+          See it live
+        </h2>
+        <p className="text-sm text-[#7a7f8a]/50 mb-10 max-w-md mx-auto">
+          Every verdict on-chain. Every position real. All code open-source.
+        </p>
+        <Link
+          href="/feed"
+          className="group inline-flex items-center gap-2 rounded-lg bg-[#6366f1] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_50px_rgba(99,102,241,0.25)] transition-all duration-500"
+        >
+          Open Threat Feed
+          <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-300" />
+        </Link>
 
-        {/* Tech pills */}
-        <div className="mt-16 flex flex-wrap justify-center gap-2 max-w-2xl mx-auto">
-          {[
-            "OKX OnchainOS", "Agentic Wallets", "14 OKX Skills", "8 Uniswap Skills",
-            "x402 Protocol", "VerdictRegistry", "X Layer", "Uniswap V3/V4",
-          ].map((tech) => (
-            <span
-              key={tech}
-              className="rounded-full border border-[#1a1d24]/30 px-3 py-1 text-[10px] text-[#7a7f8a]/40"
-            >
-              {tech}
-            </span>
+        <div className="mt-16 flex flex-wrap justify-center gap-2 max-w-xl mx-auto">
+          {["OKX OnchainOS", "Agentic Wallets", "22 AI Skills", "x402", "VerdictRegistry", "X Layer", "Uniswap V3/V4"].map((t) => (
+            <span key={t} className="rounded-full border border-[#1a1d24]/20 px-3 py-1 text-[10px] text-[#7a7f8a]/30">{t}</span>
           ))}
         </div>
       </section>
