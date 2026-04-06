@@ -1,52 +1,54 @@
 import { type Address, createPublicClient, http } from "viem";
 import { BaseAgent, type ReinvestConfig } from "./base-agent.js";
 import { type AgenticWallet } from "../wallet/agentic-wallet.js";
-import { onchainosToken, onchainosSecurity, onchainosSignal } from "../lib/onchainos.js";
+import {
+  onchainosToken,
+  onchainosSecurity,
+  onchainosTrenches,
+} from "../lib/onchainos.js";
 import { okxTokenSecurity } from "../lib/okx-api.js";
-import { getPool, getPoolInfo, FACTORY } from "../lib/uniswap.js";
+import { getPool, getPoolInfo } from "../lib/uniswap.js";
 import { config } from "../config.js";
+import { verdictStore } from "../verdicts/verdict-store.js";
+import { publishVerdictOnChain } from "../contracts/verdict-registry.js";
+import type { Verdict } from "../types.js";
 
 // ---------------------------------------------------------------------------
-// Types
+// ABI fragments for bytecode probing
 // ---------------------------------------------------------------------------
 
-export interface AnalysisResult {
-  token: string;
-  name: string;
-  symbol: string;
-  priceUsd: number;
-  marketCap: number;
-  volume24h: number;
-  riskScore: number;
-  risks: string[];
-  recommendation: "AVOID" | "CAUTION" | "LOW_RISK" | "OPPORTUNITY";
-  securityScan: Record<string, unknown> | null;
-  liquidityPools: Array<Record<string, unknown>>;
-  timestamp: string;
-}
+const inspectAbi = [
+  { name: "owner", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { name: "paused", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
+  { name: "name", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+  { name: "totalSupply", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { name: "proxiableUUID", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
-
-function computeRiskScore(risks: string[]): number {
-  let score = 0;
-  for (const r of risks) {
-    if (r.includes("honeypot")) score += 50;
-    else if (r.includes("proxy")) score += 15;
-    else if (r.includes("mint")) score += 20;
-    else if (r.includes("high_tax")) score += 15;
+async function safeCall<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null;
   }
-  return Math.min(score, 100);
 }
 
-function classify(riskScore: number): AnalysisResult["recommendation"] {
-  if (riskScore >= 50) return "AVOID";
-  if (riskScore >= 25) return "CAUTION";
-  if (riskScore >= 10) return "LOW_RISK";
-  return "OPPORTUNITY";
+function classifyVerdict(score: number): Verdict["verdict"] {
+  if (score <= 15) return "SAFE";
+  if (score <= 40) return "CAUTION";
+  return "DANGEROUS";
 }
 
 // ---------------------------------------------------------------------------
@@ -54,164 +56,287 @@ function classify(riskScore: number): AnalysisResult["recommendation"] {
 // ---------------------------------------------------------------------------
 
 export class AnalystAgent extends BaseAgent {
+  private readonly publicClient;
+
   constructor(wallet: AgenticWallet, reinvestConfig?: ReinvestConfig) {
-    super("analyst", wallet, reinvestConfig);
+    super("Analyst", wallet, reinvestConfig);
+    this.publicClient = createPublicClient({
+      transport: http(config.xlayerRpcUrl),
+    });
   }
 
-  async execute(action: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  async execute(
+    action: string,
+    params: Record<string, unknown> = {},
+  ): Promise<unknown> {
     switch (action) {
-      case "token-report":
-        return this.tokenReport(params);
-      case "trending":
-        return this.getTrending();
+      case "scan":
+        return this.deepScan(params.token as string);
+      case "report": {
+        const token = params.token as string;
+        const existing = verdictStore.getByToken(token);
+        if (existing) return existing;
+        return this.deepScan(token);
+      }
       default:
         throw new Error(`Unknown action: ${action}`);
     }
   }
 
-  // -----------------------------------------------------------------------
-  // token-report
-  // -----------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Deep scan
+  // -------------------------------------------------------------------------
 
-  private async tokenReport(params: Record<string, unknown>): Promise<AnalysisResult> {
-    const token = (params.token as string) ?? "0x0";
-    this.log(`Generating token report for ${token}`);
+  async deepScan(tokenAddress: string): Promise<Verdict> {
+    this.log(`Deep scan: ${tokenAddress}`);
 
     // 1. Price info
-    const priceResult = onchainosToken.priceInfo(token);
+    const priceResult = onchainosToken.priceInfo(tokenAddress);
     const priceData = (priceResult.success ? priceResult.data : null) as Record<string, unknown> | null;
 
     // 2. Security scan via OnchainOS
-    const secResult = onchainosSecurity.tokenScan(token, config.chainId);
+    const secResult = onchainosSecurity.tokenScan(tokenAddress, config.chainId);
     let securityScan = (secResult.success ? secResult.data : null) as Record<string, unknown> | null;
 
-    // Fallback to OKX token security
+    // 3. Fallback: OKX token security
     if (!securityScan) {
       try {
-        securityScan = await okxTokenSecurity(String(config.chainId), token) as Record<string, unknown> | null;
+        securityScan = (await okxTokenSecurity(
+          String(config.chainId),
+          tokenAddress,
+        )) as Record<string, unknown> | null;
       } catch {
         securityScan = null;
       }
     }
 
-    // 3. Advanced info (dev stats)
-    const advResult = onchainosToken.advancedInfo(token);
+    // 4. Dev info (rug history)
+    const devResult = onchainosTrenches.devInfo(tokenAddress);
+    const devData = (devResult.success ? devResult.data : null) as Record<string, unknown> | null;
+
+    // 5. Advanced info (holder concentration)
+    const advResult = onchainosToken.advancedInfo(tokenAddress);
     const advData = (advResult.success ? advResult.data : null) as Record<string, unknown> | null;
 
-    // 4. Liquidity pools from OnchainOS
-    const liqResult = onchainosToken.liquidity(token);
-    const liqData = (liqResult.success ? liqResult.data : null) as Record<string, unknown> | null;
-    const liquidityPools: Array<Record<string, unknown>> = Array.isArray(liqData) ? liqData : [];
+    // 6. Bytecode probe via viem readContract
+    const [owner, _paused, name, symbol, _decimals, _totalSupply, proxiableUUID] =
+      await Promise.all([
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "owner",
+          }),
+        ),
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "paused",
+          }),
+        ),
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "name",
+          }),
+        ),
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "symbol",
+          }),
+        ),
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "decimals",
+          }),
+        ),
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "totalSupply",
+          }),
+        ),
+        safeCall(() =>
+          this.publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: inspectAbi,
+            functionName: "proxiableUUID",
+          }),
+        ),
+      ]);
 
-    // 5. Uniswap v3 pool check
+    // 7. Liquidity check
+    const liqResult = onchainosToken.liquidity(tokenAddress);
+    const liqData = (liqResult.success ? liqResult.data : null) as Record<string, unknown> | null;
+    let liquidityUsd = Number(
+      liqData && typeof liqData === "object"
+        ? (liqData as Record<string, unknown>).tvlUsd ??
+            (liqData as Record<string, unknown>).liquidityUsd ??
+            0
+        : Array.isArray(liqData)
+          ? (liqData as Array<Record<string, unknown>>).reduce(
+              (sum, p) => sum + Number(p.tvlUsd ?? 0),
+              0,
+            )
+          : 0,
+    );
+
+    // Uniswap v3 pool check
+    let hasUniPool = false;
     try {
-      const xlayer = createPublicClient({ transport: http(config.xlayerRpcUrl) });
       const usdt = config.contracts.usdt as Address;
-      const poolAddr = await getPool(xlayer, token as Address, usdt, 3000);
+      const poolAddr = await getPool(
+        this.publicClient,
+        tokenAddress as Address,
+        usdt,
+        3000,
+      );
       if (poolAddr && poolAddr !== ZERO_ADDRESS) {
-        const poolInfo = await getPoolInfo(xlayer, poolAddr);
-        liquidityPools.push({
-          source: "uniswap_v3",
-          address: poolInfo.address,
-          token0: poolInfo.token0,
-          token1: poolInfo.token1,
-          fee: poolInfo.fee,
-          liquidity: poolInfo.liquidity.toString(),
-        });
+        hasUniPool = true;
+        const poolInfo = await getPoolInfo(this.publicClient, poolAddr);
+        const poolLiq = Number(poolInfo.liquidity);
+        if (poolLiq > liquidityUsd) liquidityUsd = poolLiq;
       }
     } catch {
       // Uniswap pool not available
     }
 
-    // 6. Risk analysis
+    // 8. Risk scoring
     const risks: string[] = [];
-    if (securityScan) {
-      if (securityScan.isHoneypot === true || securityScan.isHoneypot === "1") risks.push("honeypot");
-      if (securityScan.isProxy === true || securityScan.isProxy === "1") risks.push("proxy");
-      if (securityScan.isMintable === true || securityScan.isMintable === "1") risks.push("mint");
-      const buyTax = Number(securityScan.buyTax ?? 0);
-      const sellTax = Number(securityScan.sellTax ?? 0);
-      if (buyTax > 5 || sellTax > 5) risks.push("high_tax");
+    let riskScore = 0;
+
+    const isHoneypot =
+      securityScan?.isHoneypot === true ||
+      securityScan?.isHoneypot === "1";
+    if (isHoneypot) {
+      risks.push("honeypot");
+      riskScore += 50;
     }
 
-    const riskScore = computeRiskScore(risks);
-    const recommendation = classify(riskScore);
+    const hasRug =
+      devData?.rugHistory === true ||
+      devData?.hasRug === true ||
+      (Array.isArray(devData?.rugs) && (devData.rugs as unknown[]).length > 0);
+    if (hasRug) {
+      risks.push("rug_history");
+      riskScore += 40;
+    }
 
-    const result: AnalysisResult = {
-      token,
-      name: String(priceData?.name ?? advData?.name ?? "Unknown"),
-      symbol: String(priceData?.symbol ?? advData?.symbol ?? "???"),
+    const hasMint =
+      securityScan?.isMintable === true ||
+      securityScan?.isMintable === "1";
+    if (hasMint) {
+      risks.push("mint");
+      riskScore += 20;
+    }
+
+    const isProxy =
+      securityScan?.isProxy === true ||
+      securityScan?.isProxy === "1" ||
+      proxiableUUID !== null;
+    if (isProxy) {
+      risks.push("proxy");
+      riskScore += 15;
+    }
+
+    const buyTax = Number(securityScan?.buyTax ?? 0);
+    const sellTax = Number(securityScan?.sellTax ?? 0);
+    if (buyTax > 5 || sellTax > 5) {
+      risks.push("high_tax");
+      riskScore += 15;
+    }
+
+    const holderConcentration = Number(
+      advData?.topHolderPercent ??
+        advData?.holderConcentration ??
+        0,
+    );
+    if (holderConcentration > 70) {
+      risks.push("concentrated_holders");
+      riskScore += 10;
+    }
+
+    riskScore = Math.min(riskScore, 100);
+
+    // 9. Classify verdict
+    const verdictLabel = classifyVerdict(riskScore);
+
+    const tokenName = String(
+      priceData?.name ?? name ?? advData?.name ?? "Unknown",
+    );
+    const tokenSymbol = String(
+      priceData?.symbol ?? symbol ?? advData?.symbol ?? "???",
+    );
+
+    const verdict: Verdict = {
+      token: tokenAddress,
+      tokenName,
+      tokenSymbol,
+      riskScore,
+      verdict: verdictLabel,
+      isHoneypot,
+      hasRug,
+      hasMint,
+      isProxy,
+      buyTax,
+      sellTax,
+      holderConcentration,
+      risks,
       priceUsd: Number(priceData?.priceUsd ?? priceData?.price ?? 0),
       marketCap: Number(priceData?.marketCap ?? advData?.marketCap ?? 0),
-      volume24h: Number(priceData?.volume24h ?? advData?.volume24h ?? 0),
-      riskScore,
-      risks,
-      recommendation,
-      securityScan,
-      liquidityPools,
-      timestamp: new Date().toISOString(),
-    };
-
-    this.emit({
+      liquidityUsd,
       timestamp: Date.now(),
-      agent: this.name,
-      type: "token-report",
-      message: `Report for ${token}: ${recommendation} (risk ${riskScore})`,
-      details: { token, riskScore, recommendation },
-    });
-
-    return result;
-  }
-
-  // -----------------------------------------------------------------------
-  // trending
-  // -----------------------------------------------------------------------
-
-  private getTrending(): Record<string, unknown> {
-    const activitiesResult = onchainosSignal.activities("smart_money");
-    const hotResult = onchainosToken.hotTokens();
-
-    return {
-      smartMoney: activitiesResult.success ? activitiesResult.data : [],
-      hotTokens: hotResult.success ? hotResult.data : [],
-      timestamp: new Date().toISOString(),
     };
-  }
 
-  // -----------------------------------------------------------------------
-  // Autonomous loop
-  // -----------------------------------------------------------------------
+    // 10. Store verdict
+    verdictStore.add(verdict);
 
-  override async autonomousLoop(): Promise<void> {
-    this.log("Autonomous loop: fetching trending tokens");
-
-    const trending = this.getTrending();
-    const hotTokens = trending.hotTokens as Array<Record<string, unknown>> | undefined;
-    const tokens = (hotTokens ?? []).slice(0, 3);
-
-    for (const t of tokens) {
-      const address = String(t.address ?? t.token ?? t.contractAddress ?? "");
-      if (!address) continue;
-      try {
-        await this.tokenReport({ token: address });
-      } catch (err) {
-        this.log(`Failed to analyze ${address}: ${err instanceof Error ? err.message : String(err)}`);
-      }
+    // 11. Publish on-chain
+    try {
+      await publishVerdictOnChain(
+        this.wallet,
+        tokenAddress as Address,
+        riskScore,
+        verdictLabel,
+        isHoneypot,
+        hasRug,
+      );
+      this.log(`On-chain verdict published for ${tokenAddress}`);
+    } catch (err) {
+      this.log(
+        `Failed to publish on-chain verdict: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
+    // 12. Emit event
     this.emit({
       timestamp: Date.now(),
       agent: this.name,
-      type: "autonomous-cycle",
-      message: `Analyzed ${tokens.length} trending tokens`,
+      type: "verdict",
+      message: `${tokenSymbol}: ${verdictLabel} (risk ${riskScore})`,
+      details: {
+        token: tokenAddress,
+        riskScore,
+        verdict: verdictLabel,
+        risks,
+      },
     });
+
+    return verdict;
   }
 
-  // -----------------------------------------------------------------------
-  // Service buying
-  // -----------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Service buying — analyst buys nothing
+  // -------------------------------------------------------------------------
 
-  override shouldBuyService(type: string): boolean {
-    return type === "auditor" || type === "trader";
+  override shouldBuyService(_type: string): boolean {
+    return false;
   }
 }
