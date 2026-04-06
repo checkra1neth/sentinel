@@ -92,9 +92,10 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
             Try:
           </span>
           {[
-            { label: "Scan USDT", addr: "0x1E4a5963aBFD975d8c9021ce480b42188849D41d" },
-            { label: "Scan USDC", addr: "0x74b7f16337b8972027f6196a17a631ac6de26d22" },
-            { label: "Scan Registry", addr: "0xDd0FF50142Ab591D2Bc0D0AF5Bf230A9f2B84E86" },
+            { label: "DOGSHIT", addr: "0x70bf3e2b75d8832d7f790a87fffc1fa9d63dc5bb" },
+            { label: "XDOG", addr: "0x0cc24c51bf89c00c5affbfcf5e856c25ecbdb48e" },
+            { label: "USDT", addr: "0x1E4a5963aBFD975d8c9021ce480b42188849D41d" },
+            { label: "WOKB", addr: "0xe538905cf8410324e03a5a23c1c177a474d59b2b" },
           ].map((sample) => (
             <button
               key={sample.addr}

@@ -24,6 +24,16 @@ interface Verdict {
   timestamp: number;
   txHash?: string;
   lpInvested?: string;
+  holders?: number;
+  priceChange24H?: number;
+  volume24H?: number;
+  defiPool?: {
+    name: string;
+    platform: string;
+    apr: string;
+    tvl: string;
+    investmentId: number;
+  };
 }
 
 const VERDICT_COLORS: Record<string, string> = {
@@ -206,6 +216,25 @@ export const VerdictRow = forwardRef<
                 {formatUsd(verdict.liquidityUsd)}
               </span>
             </div>
+            {(verdict.volume24H ?? 0) > 0 && (
+              <div>
+                <span className="text-[#7a7f8a]">Vol 24H </span>
+                <span className="text-[#e8eaed] tabular-nums font-mono">
+                  {formatUsd(verdict.volume24H ?? 0)}
+                </span>
+              </div>
+            )}
+            {verdict.priceChange24H !== undefined && verdict.priceChange24H !== 0 && (
+              <div>
+                <span className="text-[#7a7f8a]">24H </span>
+                <span
+                  className="tabular-nums font-mono"
+                  style={{ color: verdict.priceChange24H > 0 ? "#34d399" : "#ef4444" }}
+                >
+                  {verdict.priceChange24H > 0 ? "+" : ""}{verdict.priceChange24H.toFixed(1)}%
+                </span>
+              </div>
+            )}
             {verdict.lpInvested && (
               <div>
                 <span className="text-[#7a7f8a]">LP </span>
@@ -216,7 +245,7 @@ export const VerdictRow = forwardRef<
             )}
           </div>
 
-          {/* Tax info */}
+          {/* Tax & holder info */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs mb-3">
             <div>
               <span className="text-[#7a7f8a]">Buy Tax </span>
@@ -236,19 +265,47 @@ export const VerdictRow = forwardRef<
                 {verdict.sellTax}%
               </span>
             </div>
-            <div>
-              <span className="text-[#7a7f8a]">Holders </span>
-              <span
-                className="tabular-nums font-mono"
-                style={{
-                  color:
-                    verdict.holderConcentration > 50 ? "#f59e0b" : "#e8eaed",
-                }}
-              >
-                {verdict.holderConcentration}% top
+            {(verdict.holders ?? 0) > 0 && (
+              <div>
+                <span className="text-[#7a7f8a]">Holders </span>
+                <span className="text-[#e8eaed] tabular-nums font-mono">
+                  {(verdict.holders ?? 0).toLocaleString()}
+                </span>
+              </div>
+            )}
+            {verdict.holderConcentration > 0 && (
+              <div>
+                <span className="text-[#7a7f8a]">Top 10 </span>
+                <span
+                  className="tabular-nums font-mono"
+                  style={{ color: verdict.holderConcentration > 30 ? "#f59e0b" : "#e8eaed" }}
+                >
+                  {verdict.holderConcentration.toFixed(1)}%
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* DeFi pool info */}
+          {verdict.defiPool && (
+            <div
+              className="flex items-center gap-3 rounded px-3 py-2 mb-3 text-xs"
+              style={{ backgroundColor: "rgba(99, 102, 241, 0.06)", border: "1px solid rgba(99, 102, 241, 0.15)" }}
+            >
+              <span className="text-[#6366f1] font-semibold uppercase tracking-wider text-[10px]">
+                {verdict.defiPool.platform}
+              </span>
+              <span className="text-[#e8eaed] font-mono">
+                {verdict.defiPool.name}
+              </span>
+              <span className="text-[#34d399] font-semibold tabular-nums">
+                APR {(Number(verdict.defiPool.apr) * 100).toFixed(1)}%
+              </span>
+              <span className="text-[#7a7f8a] tabular-nums">
+                TVL {formatUsd(Number(verdict.defiPool.tvl))}
               </span>
             </div>
-          </div>
+          )}
 
           {/* Full risks list */}
           {risks.length > 0 && (
