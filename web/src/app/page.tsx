@@ -11,6 +11,7 @@ import { AuroraBg } from "../components/aurora-bg";
 import { CursorGlow } from "../components/cursor-glow";
 import { TiltFrame } from "../components/tilt-frame";
 import { LiveTerminal } from "../components/live-terminal";
+import { AsciiShield } from "../components/ascii-shield";
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
@@ -81,8 +82,17 @@ export default function LandingPage(): React.ReactNode {
       <CursorGlow />
 
       {/* HERO */}
-      <section className="relative pt-24 lg:pt-36 pb-16 px-6">
-        <div className="max-w-[1100px] mx-auto text-center">
+      <section className="relative pt-24 lg:pt-36 pb-16 px-6 overflow-hidden">
+        {/* ASCII Shield background — interactive, mouse-reactive */}
+        <div className="absolute inset-0 -z-10 opacity-60">
+          <AsciiShield />
+        </div>
+        {/* Vignette to keep text readable */}
+        <div className="absolute inset-0 -z-10 pointer-events-none" style={{
+          background: "radial-gradient(ellipse 50% 50% at 50% 45%, transparent 20%, #09090b 75%)",
+        }} />
+
+        <div className="max-w-[1100px] mx-auto text-center relative">
           <p className="text-[11px] uppercase tracking-[0.3em] text-[#a1a1aa]/50 mb-6">Self-Funding Security Oracle on X Layer</p>
           <h1 ref={heroH1Ref} className="text-[clamp(2.2rem,5vw,4rem)] font-bold tracking-[-0.02em] text-[#fafafa] leading-[1.15] mb-6 max-w-[800px] mx-auto">
             Autonomous agents that scan tokens, publish verdicts, and invest in what they trust.
