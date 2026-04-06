@@ -1,24 +1,62 @@
 "use client";
 
+import {
+  Radar,
+  Shield,
+  Coins,
+  Eye,
+  Clock,
+  ShieldCheck,
+  ShieldX,
+  Search,
+  ArrowUpCircle,
+  XCircle,
+  FileText,
+  Wifi,
+  WifiOff,
+  TrendingUp,
+  RefreshCw,
+  ArrowLeftRight,
+} from "lucide-react";
 import { useAgentEvents, type AgentEvent } from "../lib/ws";
+import type { ComponentType } from "react";
 
-const AGENT_COLORS: Record<string, string> = {
-  Scanner: "text-blue-400",
-  Analyst: "text-purple-400",
-  Executor: "text-emerald-400",
-  Sentinel: "text-yellow-400",
-  Cron: "text-gray-400",
+const AGENT_CONFIG: Record<
+  string,
+  { color: string; bgColor: string; Icon: ComponentType<{ className?: string }> }
+> = {
+  Scanner: { color: "text-cyan-400", bgColor: "bg-cyan-400/10", Icon: Radar },
+  Analyst: { color: "text-purple-400", bgColor: "bg-purple-400/10", Icon: Shield },
+  Executor: { color: "text-emerald-400", bgColor: "bg-emerald-400/10", Icon: Coins },
+  Sentinel: { color: "text-amber-400", bgColor: "bg-amber-400/10", Icon: Eye },
+  Cron: { color: "text-slate-400", bgColor: "bg-slate-400/10", Icon: Clock },
 };
 
-const EVENT_ICONS: Record<string, string> = {
-  verdict: "\uD83D\uDEE1\uFE0F",
-  invest: "\uD83D\uDCB0",
-  scan: "\uD83D\uDD0D",
-  buy_service: "\uD83D\uDCB0",
-  sell_service: "\uD83D\uDCC8",
-  swap: "\uD83D\uDD04",
-  reinvest: "\uD83C\uDF31",
-  error: "\u26A0\uFE0F",
+const EVENT_ICONS: Record<
+  string,
+  { Icon: ComponentType<{ className?: string }>; color: string }
+> = {
+  verdict: { Icon: ShieldCheck, color: "text-emerald-400" },
+  invest: { Icon: ArrowUpCircle, color: "text-emerald-400" },
+  scan: { Icon: Search, color: "text-cyan-400" },
+  buy_service: { Icon: Coins, color: "text-amber-400" },
+  sell_service: { Icon: TrendingUp, color: "text-purple-400" },
+  swap: { Icon: ArrowLeftRight, color: "text-cyan-400" },
+  reinvest: { Icon: RefreshCw, color: "text-emerald-400" },
+  error: { Icon: XCircle, color: "text-red-400" },
+  log: { Icon: FileText, color: "text-slate-500" },
+};
+
+const SEVERITY_BORDERS: Record<string, string> = {
+  verdict: "border-l-emerald-500/50",
+  invest: "border-l-emerald-500/50",
+  scan: "border-l-cyan-500/30",
+  buy_service: "border-l-amber-500/30",
+  sell_service: "border-l-purple-500/30",
+  swap: "border-l-cyan-500/30",
+  reinvest: "border-l-emerald-500/30",
+  error: "border-l-red-500/50",
+  log: "border-l-slate-700",
 };
 
 function formatTime(ts: number): string {
@@ -26,20 +64,43 @@ function formatTime(ts: number): string {
   return d.toLocaleTimeString("en-US", { hour12: false });
 }
 
-function EventRow({ event }: { event: AgentEvent }): React.ReactNode {
-  const agentColor = AGENT_COLORS[event.agent] ?? "text-gray-400";
-  const icon = EVENT_ICONS[event.type] ?? "\u2022";
+function EventRow({
+  event,
+  isOdd,
+}: {
+  event: AgentEvent;
+  isOdd: boolean;
+}): React.ReactNode {
+  const agentCfg = AGENT_CONFIG[event.agent] ?? {
+    color: "text-slate-400",
+    bgColor: "bg-slate-400/10",
+    Icon: FileText,
+  };
+  const eventCfg = EVENT_ICONS[event.type] ?? {
+    Icon: FileText,
+    color: "text-slate-500",
+  };
+  const borderColor = SEVERITY_BORDERS[event.type] ?? "border-l-slate-700";
+  const { Icon: AgentIcon } = agentCfg;
+  const { Icon: EventIcon } = eventCfg;
 
   return (
-    <div className="flex items-start gap-2 py-1.5 border-b border-gray-800/50 last:border-0">
-      <span className="text-xs text-gray-600 shrink-0 w-18">
+    <div
+      className={`flex items-start gap-2 py-2 px-3 border-l-2 ${borderColor} ${
+        isOdd ? "bg-slate-900/30" : ""
+      }`}
+    >
+      <span className="text-[11px] text-slate-600 shrink-0 w-16 tabular-nums pt-0.5">
         {formatTime(event.timestamp)}
       </span>
-      <span className="shrink-0 w-5 text-center">{icon}</span>
-      <span className={`text-xs font-semibold shrink-0 ${agentColor}`}>
-        [{event.agent}]
+      <EventIcon className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${eventCfg.color}`} />
+      <span
+        className={`inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${agentCfg.color} ${agentCfg.bgColor}`}
+      >
+        <AgentIcon className="h-3 w-3" />
+        {event.agent}
       </span>
-      <span className="text-xs text-gray-300 flex-1 break-words">
+      <span className="text-xs text-slate-300 flex-1 break-words">
         {event.message}
       </span>
       {event.txHash && (
@@ -47,7 +108,7 @@ function EventRow({ event }: { event: AgentEvent }): React.ReactNode {
           href={`https://www.oklink.com/xlayer/tx/${event.txHash}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-emerald-500 hover:text-emerald-400 shrink-0 underline"
+          className="text-[11px] text-cyan-400 hover:text-cyan-300 shrink-0 transition-colors"
         >
           tx
         </a>
@@ -60,16 +121,18 @@ export function LiveFeed(): React.ReactNode {
   const { events, connected } = useAgentEvents();
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Live Event Feed</h2>
+    <div className="rounded-xl border border-slate-800 bg-[#111827] overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800/50">
+        <span className="text-[11px] uppercase tracking-wider text-slate-500">
+          Live Events
+        </span>
         <div className="flex items-center gap-2">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              connected ? "bg-emerald-400" : "bg-red-400"
-            }`}
-          />
-          <span className="text-xs text-gray-500">
+          {connected ? (
+            <Wifi className="h-3.5 w-3.5 text-emerald-400" />
+          ) : (
+            <WifiOff className="h-3.5 w-3.5 text-red-400" />
+          )}
+          <span className="text-[11px] text-slate-500">
             {connected ? "Connected" : "Disconnected"}
           </span>
         </div>
@@ -77,12 +140,19 @@ export function LiveFeed(): React.ReactNode {
 
       <div className="max-h-96 overflow-y-auto font-mono">
         {events.length === 0 && (
-          <p className="text-sm text-gray-500 text-center py-8">
-            No events yet. Waiting for agent activity...
-          </p>
+          <div className="flex flex-col items-center justify-center py-12">
+            <Radar className="h-6 w-6 text-slate-700 mb-2" />
+            <p className="text-xs text-slate-600">
+              Waiting for agent activity...
+            </p>
+          </div>
         )}
         {[...events].reverse().map((event, i) => (
-          <EventRow key={`${event.timestamp}-${i}`} event={event} />
+          <EventRow
+            key={`${event.timestamp}-${i}`}
+            event={event}
+            isOdd={i % 2 === 1}
+          />
         ))}
       </div>
     </div>
