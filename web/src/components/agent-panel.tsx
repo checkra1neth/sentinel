@@ -8,6 +8,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002";
 const POLL_INTERVAL = 10_000;
 
 interface Agent {
+  id: string;
   role: string;
   address: string;
   balance: string;
@@ -26,9 +27,10 @@ const ROLE_COLORS: Record<string, string> = {
   Executor: "#34d399",
 };
 
-function truncateAddress(addr: string): string {
+function truncateAddress(addr: string | undefined): string {
+  if (!addr) return "—";
   if (addr.length < 12) return addr;
-  return `${addr.slice(0, 6)}...${addr.slice(-2)}`;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 export function AgentPanel(): React.ReactNode {
@@ -38,8 +40,16 @@ export function AgentPanel(): React.ReactNode {
     try {
       const res = await fetch(`${API_URL}/api/agents`);
       if (res.ok) {
-        const data = (await res.json()) as { agents?: Agent[] };
-        setAgents(data.agents ?? []);
+        const data = (await res.json()) as { agents?: Array<Record<string, string>> };
+        setAgents(
+          (data.agents ?? []).map((a) => ({
+            id: a.id || a.name,
+            role: a.name || a.role || "Unknown",
+            address: a.walletAddress || a.wallet || a.address || "",
+            balance: a.usdtBalance || a.balance || "0",
+            status: a.status || "active",
+          })),
+        );
       }
     } catch {
       // server unavailable
@@ -66,7 +76,7 @@ export function AgentPanel(): React.ReactNode {
             agent.status === "active" || agent.status === "running";
 
           return (
-            <div key={agent.role} className="flex items-center gap-x-6">
+            <div key={agent.id} className="flex items-center gap-x-6">
               <div className="flex items-center gap-2">
                 <span className="shrink-0" style={{ color }}>
                   <Icon className="h-3 w-3" />

@@ -17,8 +17,9 @@ interface InlineStatsProps {
   lpInvested: string;
 }
 
-function parseNumeric(val: string): number {
-  const cleaned = val.replace(/[^0-9.]/g, "");
+function parseNumeric(val: string | number): number {
+  if (typeof val === "number") return val;
+  const cleaned = String(val).replace(/[^0-9.]/g, "");
   return parseFloat(cleaned) || 0;
 }
 

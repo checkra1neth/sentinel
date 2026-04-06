@@ -73,8 +73,8 @@ export default function Home(): React.ReactNode {
       }
 
       if (statsRes.ok) {
-        const data = (await statsRes.json()) as Stats;
-        setStats(data);
+        const data = await statsRes.json();
+        setStats((data.verdicts ?? data) as Stats);
       }
     } catch {
       // server unavailable, keep stale data
