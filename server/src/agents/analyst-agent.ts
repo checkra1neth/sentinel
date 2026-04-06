@@ -419,12 +419,29 @@ export class AnalystAgent extends BaseAgent {
             const best = [...list].sort(
               (a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0),
             )[0];
+            const bestId = Number(best.investmentId ?? 0);
+
+            // Fetch detail to get pool contract address
+            let poolAddress = "";
+            if (bestId > 0) {
+              try {
+                const detailResult = onchainosDefi.detail(bestId, config.chainId);
+                if (detailResult.success && detailResult.data) {
+                  const detail = detailResult.data as Record<string, unknown>;
+                  poolAddress = String(detail.contract ?? "");
+                }
+              } catch {
+                // detail fetch optional
+              }
+            }
+
             defiPool = {
               name: String(best.name ?? ""),
               platform: String(best.platformName ?? ""),
               apr: String(best.rate ?? "0"),
               tvl: String(best.tvl ?? "0"),
-              investmentId: Number(best.investmentId ?? 0),
+              investmentId: bestId,
+              poolAddress,
             };
           }
         }

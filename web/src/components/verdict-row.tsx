@@ -33,6 +33,7 @@ interface Verdict {
     apr: string;
     tvl: string;
     investmentId: number;
+    poolAddress: string;
   };
 }
 
@@ -237,7 +238,7 @@ export const VerdictRow = forwardRef<
           {verdict.defiPool && (
             <div>
               <a
-                href={`https://app.uniswap.org/explore/pools/xlayer/${verdict.token}`}
+                href={`https://app.uniswap.org/explore/pools/xlayer/${verdict.defiPool.poolAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-[#6366f1]/10 transition-colors"

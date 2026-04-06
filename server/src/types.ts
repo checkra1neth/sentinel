@@ -214,6 +214,7 @@ export interface Verdict {
     apr: string;
     tvl: string;
     investmentId: number;
+    poolAddress: string;
   };
   holders?: number;
   priceChange24H?: number;
