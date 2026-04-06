@@ -160,23 +160,33 @@ export const onchainosMarket = {
 // ---------------------------------------------------------------------------
 
 export const onchainosDefi = {
-  search: (query: string, chainId: number = 196): OnchainosResult<unknown> =>
-    onchainos(`defi search --query "${query}" --chain ${chainId}`),
+  /** Search DeFi products — use --token and/or --platform, product-group: SINGLE_EARN, DEX_POOL, LENDING */
+  search: (token: string, chainId: number = 196, productGroup: string = "DEX_POOL", platform?: string): OnchainosResult<unknown> =>
+    onchainos(`defi search --token "${token}" --chain ${chainId} --product-group ${productGroup}${platform ? ` --platform "${platform}"` : ""}`),
 
-  detail: (protocol: string): OnchainosResult<unknown> =>
-    onchainos(`defi detail --protocol ${protocol}`),
+  /** Get pool/product detail by investment ID */
+  detail: (investmentId: number, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`defi detail --investment-id ${investmentId} --chain ${chainId}`),
 
-  invest: (protocol: string, amount: string, token?: string): OnchainosResult<unknown> =>
-    onchainos(`defi invest --protocol ${protocol} --amount ${amount}${token ? ` --token ${token}` : ""}`),
+  /** Calculate V3 pool entry amounts */
+  calculateEntry: (investmentId: number, address: string, inputToken: string, inputAmount: string, tokenDecimal: number, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`defi calculate-entry --id ${investmentId} --address ${address} --input-token ${inputToken} --input-amount ${inputAmount} --token-decimal ${tokenDecimal} --chain ${chainId}`),
 
-  withdraw: (protocol: string, amount: string): OnchainosResult<unknown> =>
-    onchainos(`defi withdraw --protocol ${protocol} --amount ${amount}`),
+  /** High-level invest: resolve token, build calldata, execute */
+  invest: (investmentId: number, address: string, token: string, amount: string, chainId: number = 196, range?: number): OnchainosResult<unknown> =>
+    onchainos(`defi invest --investment-id ${investmentId} --address ${address} --token ${token} --amount ${amount} --chain ${chainId}${range ? ` --range ${range}` : ""}`),
 
+  /** Withdraw from a DeFi position */
+  withdraw: (investmentId: number, address: string, amount: string): OnchainosResult<unknown> =>
+    onchainos(`defi withdraw --investment-id ${investmentId} --address ${address} --amount ${amount}`),
+
+  /** Get user DeFi holdings overview */
   positions: (address: string, chains: string = "xlayer"): OnchainosResult<unknown> =>
     onchainos(`defi positions --address ${address} --chains ${chains}`),
 
-  collect: (protocol: string): OnchainosResult<unknown> =>
-    onchainos(`defi collect --protocol ${protocol}`),
+  /** Collect rewards from position */
+  collect: (investmentId: number, address: string): OnchainosResult<unknown> =>
+    onchainos(`defi collect --investment-id ${investmentId} --address ${address}`),
 };
 
 // ---------------------------------------------------------------------------

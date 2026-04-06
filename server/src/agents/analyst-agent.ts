@@ -5,6 +5,7 @@ import {
   onchainosToken,
   onchainosSecurity,
   onchainosTrenches,
+  onchainosDefi,
 } from "../lib/onchainos.js";
 import { okxTokenSecurity } from "../lib/okx-api.js";
 import { getPool, getPoolInfo } from "../lib/uniswap.js";
@@ -406,6 +407,32 @@ export class AnalystAgent extends BaseAgent {
       priceData?.symbol ?? symbol ?? advData?.symbol ?? "???",
     );
 
+    // 10. DeFi pool discovery (for safe tokens — show investment opportunity)
+    let defiPool: Verdict["defiPool"] | undefined;
+    if (verdictLabel === "SAFE" || verdictLabel === "CAUTION") {
+      try {
+        const poolSearch = onchainosDefi.search(tokenSymbol, config.chainId, "DEX_POOL");
+        if (poolSearch.success && poolSearch.data) {
+          const searchData = poolSearch.data as Record<string, unknown>;
+          const list = (searchData.list ?? searchData) as Array<Record<string, unknown>>;
+          if (Array.isArray(list) && list.length > 0) {
+            const best = [...list].sort(
+              (a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0),
+            )[0];
+            defiPool = {
+              name: String(best.name ?? ""),
+              platform: String(best.platformName ?? ""),
+              apr: String(best.rate ?? "0"),
+              tvl: String(best.tvl ?? "0"),
+              investmentId: Number(best.investmentId ?? 0),
+            };
+          }
+        }
+      } catch {
+        // DeFi search optional
+      }
+    }
+
     const verdict: Verdict = {
       token: tokenAddress,
       tokenName,
@@ -424,6 +451,10 @@ export class AnalystAgent extends BaseAgent {
       marketCap: Number(priceData?.marketCap ?? advData?.marketCap ?? 0),
       liquidityUsd,
       timestamp: Date.now(),
+      holders,
+      priceChange24H,
+      volume24H: Number(priceData?.volume24H ?? 0),
+      defiPool,
     };
 
     // 10. Store verdict

@@ -125,8 +125,17 @@ export function createServiceRouter(
       (sum, p) => sum + Number(p.amountInvested),
       0,
     );
+    const totalApr = positions.length > 0
+      ? positions.reduce((sum, p) => sum + Number(p.apr ?? 0), 0) / positions.length
+      : 0;
 
-    res.json({ positions, totalInvested });
+    res.json({
+      positions,
+      totalInvested,
+      totalPositions: positions.length,
+      avgApr: totalApr,
+      executorAddress: executor.walletAddress,
+    });
   });
 
   // -------------------------------------------------------------------------

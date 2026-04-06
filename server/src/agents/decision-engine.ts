@@ -104,16 +104,19 @@ export class DecisionEngine {
       riskScore,
     });
 
-    // 2. If SAFE -> buy Executor invest
+    // 2. If SAFE -> buy Executor invest (skin in the game)
     if (verdictLabel === "SAFE") {
-      this.emitEvent("buy_service", `${address} is SAFE -> buying Executor invest`, {
+      const tokenSymbol = verdict?.tokenSymbol ?? address.slice(0, 8);
+      this.emitEvent("buy_service", `${tokenSymbol} is SAFE (risk ${riskScore}) -> investing via Executor`, {
         token: address,
+        tokenSymbol,
+        riskScore,
       });
 
       const investResult = await this.services.executor.x402.buyService(
         this.services.executor.serviceId,
         "invest",
-        { token: address, amount: "10" },
+        { token: address, tokenSymbol, riskScore, amount: "10" },
       );
 
       this.emitEvent(

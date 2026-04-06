@@ -103,6 +103,7 @@ export function startReinvestScheduler(
             config.contracts.usdt,
             WOKB,
             halfAmount,
+            config.chainId,
           );
 
           if (swapResult.success) {
@@ -110,12 +111,24 @@ export function startReinvestScheduler(
               swapData: swapResult.data,
             });
 
-            // Invest via OnchainOS DeFi
-            const investResult = onchainosDefi.invest(
-              "uniswap-v3",
-              halfAmount,
-              config.contracts.usdt,
-            );
+            // Invest via OnchainOS DeFi — search for best pool and invest
+            const poolSearch = onchainosDefi.search("USDT", config.chainId, "DEX_POOL");
+            const pools = poolSearch.success && poolSearch.data
+              ? ((poolSearch.data as Record<string, unknown>).list ?? []) as Array<Record<string, unknown>>
+              : [];
+            const bestPool = Array.isArray(pools) && pools.length > 0
+              ? [...pools].sort((a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0))[0]
+              : null;
+            const investResult = bestPool
+              ? onchainosDefi.invest(
+                  Number(bestPool.investmentId),
+                  agent.walletAddress,
+                  config.contracts.usdt,
+                  halfAmount,
+                  config.chainId,
+                  10,
+                )
+              : { success: false, data: null, error: "No pool found" };
 
             if (investResult.success) {
               emit(agent.name, "reinvest", `LP investment succeeded for ${agent.name}`, {

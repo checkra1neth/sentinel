@@ -2,11 +2,9 @@ import { type Address, createPublicClient, http } from "viem";
 import { BaseAgent, type ReinvestConfig } from "./base-agent.js";
 import { type AgenticWallet } from "../wallet/agentic-wallet.js";
 import {
-  onchainosToken,
   onchainosDefi,
   onchainosSwap,
 } from "../lib/onchainos.js";
-import { getPool } from "../lib/uniswap.js";
 import { config } from "../config.js";
 
 // ---------------------------------------------------------------------------
@@ -16,8 +14,13 @@ import { config } from "../config.js";
 export interface LpPosition {
   token: string;
   tokenSymbol: string;
-  poolAddress: string;
+  poolName: string;
+  platformName: string;
+  investmentId: number;
   amountInvested: string;
+  apr: string;
+  tvl: string;
+  range: number;
   timestamp: number;
 }
 
@@ -26,7 +29,9 @@ export interface InvestResult {
   method: "defi_lp" | "swap";
   token: string;
   amount: string;
-  poolAddress?: string;
+  investmentId?: number;
+  poolName?: string;
+  apr?: string;
   txHash?: string;
   error?: string;
 }
@@ -40,8 +45,15 @@ export interface PortfolioResult {
 // Constants
 // ---------------------------------------------------------------------------
 
-const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
 const DEFAULT_INVEST_AMOUNT = "10"; // 10 USDT
+
+// Risk score → LP range percentage (lower risk = wider range = more LP exposure)
+function riskScoreToRange(riskScore: number): number {
+  if (riskScore <= 5) return 20;   // Very safe → wide ±20% range
+  if (riskScore <= 10) return 10;  // Safe → ±10% range
+  if (riskScore <= 15) return 5;   // Borderline → tight ±5% range
+  return 3;                        // Anything above → very tight ±3%
+}
 
 // ---------------------------------------------------------------------------
 // Agent
@@ -66,6 +78,8 @@ export class ExecutorAgent extends BaseAgent {
       case "invest":
         return this.invest(
           params.token as string,
+          params.tokenSymbol as string | undefined,
+          params.riskScore as number | undefined,
           params.amount as string | undefined,
         );
       case "portfolio":
@@ -76,108 +90,109 @@ export class ExecutorAgent extends BaseAgent {
   }
 
   // -------------------------------------------------------------------------
-  // Investment flow
+  // Investment flow — DeFi LP first, swap fallback
   // -------------------------------------------------------------------------
 
   private async invest(
     token: string,
+    tokenSymbol?: string,
+    riskScore?: number,
     amount?: string,
   ): Promise<InvestResult> {
     const investAmount = amount ?? DEFAULT_INVEST_AMOUNT;
-    this.log(`Investing ${investAmount} USDT into ${token}`);
+    const range = riskScoreToRange(riskScore ?? 10);
+    const sym = tokenSymbol ?? token.slice(0, 8);
 
-    // 1. Check liquidity
-    const liqResult = onchainosToken.liquidity(token, config.chainId);
-    const hasLiquidity = liqResult.success && liqResult.data;
+    this.log(`Investing ${investAmount} USDT into ${sym} (risk ${riskScore ?? "?"}, range ±${range}%)`);
 
-    // 2. Check for Uniswap pool
-    let uniPoolAddress: string | undefined;
+    // 1. Search for DEX pool via OKX DeFi
     try {
-      const usdt = config.contracts.usdt as Address;
-      const poolAddr = await getPool(
-        this.publicClient,
-        token as Address,
-        usdt,
-        3000,
-      );
-      if (poolAddr && poolAddr !== ZERO_ADDRESS) {
-        uniPoolAddress = poolAddr;
-      }
-    } catch {
-      // No Uniswap pool
-    }
+      const searchResult = onchainosDefi.search(sym, config.chainId, "DEX_POOL");
+      if (searchResult.success && searchResult.data) {
+        const searchData = searchResult.data as Record<string, unknown>;
+        const list = (searchData.list ?? searchData) as Array<Record<string, unknown>>;
 
-    // 3. Try DeFi LP investment if pool exists
-    if (uniPoolAddress || hasLiquidity) {
-      try {
-        const searchResult = onchainosDefi.search(token, config.chainId);
-        if (searchResult.success && searchResult.data) {
-          const opportunities = Array.isArray(searchResult.data)
-            ? searchResult.data
-            : [searchResult.data];
-          const lpOpp = (opportunities as Array<Record<string, unknown>>).find(
-            (o) =>
-              o.type === "lp" ||
-              o.type === "liquidity" ||
-              o.protocol?.toString().includes("uniswap"),
+        if (Array.isArray(list) && list.length > 0) {
+          // Pick the best pool — highest TVL
+          const sorted = [...list].sort(
+            (a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0),
+          );
+          const pool = sorted[0];
+          const investmentId = Number(pool.investmentId);
+          const poolName = String(pool.name ?? "");
+          const platformName = String(pool.platformName ?? "");
+          const apr = String(pool.rate ?? "0");
+          const tvl = String(pool.tvl ?? "0");
+
+          this.log(`Found pool: ${poolName} on ${platformName} (APR ${(Number(apr) * 100).toFixed(1)}%, TVL $${Number(tvl).toLocaleString()})`);
+
+          // 2. Invest via DeFi skill with risk-based range
+          const investResult = onchainosDefi.invest(
+            investmentId,
+            this.walletAddress,
+            config.contracts.usdt,
+            investAmount,
+            config.chainId,
+            range,
           );
 
-          if (lpOpp) {
-            const protocolId = String(lpOpp.id ?? lpOpp.protocol ?? "");
-            const investResult = onchainosDefi.invest(
-              protocolId,
-              investAmount,
-              config.contracts.usdt,
-            );
+          if (investResult.success) {
+            const data = investResult.data as Record<string, unknown> | null;
+            const txHash = String(data?.txHash ?? data?.hash ?? "");
 
-            if (investResult.success) {
-              const data = investResult.data as Record<string, unknown>;
-              const txHash = String(data.txHash ?? data.hash ?? "");
-              const poolAddr = String(
-                lpOpp.poolAddress ?? uniPoolAddress ?? "",
-              );
+            const position: LpPosition = {
+              token,
+              tokenSymbol: sym,
+              poolName,
+              platformName,
+              investmentId,
+              amountInvested: investAmount,
+              apr,
+              tvl,
+              range,
+              timestamp: Date.now(),
+            };
+            this.lpPositions.push(position);
 
-              const position: LpPosition = {
-                token,
-                tokenSymbol: String(lpOpp.symbol ?? lpOpp.tokenSymbol ?? token),
-                poolAddress: poolAddr,
-                amountInvested: investAmount,
-                timestamp: Date.now(),
-              };
-              this.lpPositions.push(position);
-
-              this.emit({
-                timestamp: Date.now(),
-                agent: this.name,
-                type: "invest",
-                message: `LP invested ${investAmount} USDT into ${token}`,
-                details: {
-                  token,
-                  amount: investAmount,
-                  method: "defi_lp",
-                  pool: poolAddr,
-                },
-              });
-
-              return {
-                success: true,
-                method: "defi_lp",
+            this.emit({
+              timestamp: Date.now(),
+              agent: this.name,
+              type: "invest",
+              message: `LP ${poolName} on ${platformName}: ${investAmount} USDT (±${range}% range, APR ${(Number(apr) * 100).toFixed(1)}%)`,
+              details: {
                 token,
                 amount: investAmount,
-                poolAddress: poolAddr,
-                txHash,
-              };
-            }
+                method: "defi_lp",
+                pool: poolName,
+                platform: platformName,
+                apr,
+                range,
+                investmentId,
+              },
+            });
+
+            return {
+              success: true,
+              method: "defi_lp",
+              token,
+              amount: investAmount,
+              investmentId,
+              poolName,
+              apr,
+              txHash,
+            };
           }
+
+          this.log(`DeFi invest failed, falling back to swap`);
         }
-      } catch (err) {
-        this.log(
-          `DeFi LP failed, falling back to swap: ${err instanceof Error ? err.message : String(err)}`,
-        );
       }
+    } catch (err) {
+      this.log(
+        `DeFi search/invest failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
-    // 4. Fallback: simple swap USDT -> token
+    // 3. Fallback: simple swap USDT → token via OKX DEX aggregator
     try {
       const swapResult = onchainosSwap.execute(
         config.contracts.usdt,
@@ -187,14 +202,19 @@ export class ExecutorAgent extends BaseAgent {
       );
 
       if (swapResult.success) {
-        const data = swapResult.data as Record<string, unknown>;
-        const txHash = String(data.txHash ?? data.hash ?? "");
+        const data = swapResult.data as Record<string, unknown> | null;
+        const txHash = String(data?.txHash ?? data?.hash ?? "");
 
         const position: LpPosition = {
           token,
-          tokenSymbol: token,
-          poolAddress: "",
+          tokenSymbol: sym,
+          poolName: `USDT→${sym}`,
+          platformName: "OKX DEX",
+          investmentId: 0,
           amountInvested: investAmount,
+          apr: "0",
+          tvl: "0",
+          range: 0,
           timestamp: Date.now(),
         };
         this.lpPositions.push(position);
@@ -203,7 +223,7 @@ export class ExecutorAgent extends BaseAgent {
           timestamp: Date.now(),
           agent: this.name,
           type: "invest",
-          message: `Swap invested ${investAmount} USDT -> ${token}`,
+          message: `Swap ${investAmount} USDT → ${sym} via OKX DEX`,
           details: {
             token,
             amount: investAmount,
@@ -225,7 +245,7 @@ export class ExecutorAgent extends BaseAgent {
         method: "swap",
         token,
         amount: investAmount,
-        error: "Swap execution returned failure",
+        error: "Swap returned failure",
       };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -241,10 +261,20 @@ export class ExecutorAgent extends BaseAgent {
   }
 
   // -------------------------------------------------------------------------
-  // Portfolio
+  // Portfolio — local positions + on-chain DeFi positions
   // -------------------------------------------------------------------------
 
   private getPortfolio(): PortfolioResult {
+    // Also check on-chain DeFi positions
+    try {
+      const posResult = onchainosDefi.positions(this.walletAddress);
+      if (posResult.success && posResult.data) {
+        this.log(`On-chain positions: ${JSON.stringify(posResult.data).slice(0, 200)}`);
+      }
+    } catch {
+      // ignore
+    }
+
     const totalInvested = this.lpPositions.reduce(
       (sum, p) => sum + Number(p.amountInvested),
       0,

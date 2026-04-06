@@ -208,6 +208,16 @@ export interface Verdict {
   timestamp: number;
   txHash?: string;
   lpInvested?: string;
+  defiPool?: {
+    name: string;
+    platform: string;
+    apr: string;
+    tvl: string;
+    investmentId: number;
+  };
+  holders?: number;
+  priceChange24H?: number;
+  volume24H?: number;
 }
 
 export interface VerdictStats {
