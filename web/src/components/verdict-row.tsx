@@ -233,28 +233,25 @@ export const VerdictRow = forwardRef<
             <span><span className="text-[#7a7f8a]/60">Tax </span><span className="font-mono tabular-nums" style={{ color: verdict.buyTax > 5 || verdict.sellTax > 5 ? "#ef4444" : "#e8eaed" }}>{verdict.buyTax}/{verdict.sellTax}%</span></span>
           </div>
 
-          {/* Row 2: DeFi pool (inline) + risk tags */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {verdict.defiPool && (
-              <span
-                className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px]"
+          {/* Row 2: DeFi pool link */}
+          {verdict.defiPool && (
+            <div>
+              <a
+                href={`https://app.uniswap.org/explore/pools/xlayer/${verdict.token}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-[#6366f1]/10 transition-colors"
                 style={{ backgroundColor: "rgba(99, 102, 241, 0.06)", border: "1px solid rgba(99, 102, 241, 0.12)" }}
+                onClick={(e) => e.stopPropagation()}
               >
                 <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#6366f1]/70">{verdict.defiPool.platform}</span>
                 <span className="text-[#e8eaed]/80 font-mono">{verdict.defiPool.name}</span>
                 <span className="text-[#34d399] font-semibold tabular-nums">{(Number(verdict.defiPool.apr) * 100).toFixed(1)}%</span>
                 <span className="text-[#7a7f8a]/40 tabular-nums font-mono">{formatUsd(Number(verdict.defiPool.tvl))}</span>
-              </span>
-            )}
-            {verdict.risks.map((risk) => (
-              <span
-                key={risk}
-                className="rounded px-1.5 py-px text-[9px] uppercase tracking-wider text-[#7a7f8a]/50 bg-[#1a1d24]/50"
-              >
-                {risk}
-              </span>
-            ))}
-          </div>
+                <ExternalLink className="h-2.5 w-2.5 text-[#6366f1]/40" />
+              </a>
+            </div>
+          )}
 
           {/* Row 3: actions */}
           <div className="flex items-center gap-3 pt-0.5">
