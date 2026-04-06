@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Eye, Search, Radio } from "lucide-react";
+import { Eye, Shield, Radio } from "lucide-react";
 import gsap from "gsap";
 import { VerdictRow } from "../components/verdict-row";
 import { InlineStats } from "../components/inline-stats";
 import { LiveFeed } from "../components/live-feed";
 import { ScanPulse } from "../components/scan-pulse";
+import { ScanInput } from "../components/scan-input";
+import { AgentPanel } from "../components/agent-panel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 const POLL_INTERVAL = 10_000;
@@ -49,10 +51,13 @@ export default function Home(): React.ReactNode {
 
   const headerRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
+  const scanInputRef = useRef<HTMLDivElement>(null);
+  const agentPanelRef = useRef<HTMLDivElement>(null);
   const feedTitleRef = useRef<HTMLDivElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const activityRef = useRef<HTMLDivElement>(null);
   const verdictRowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const newVerdictRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
 
   const fetchData = useCallback(async (): Promise<void> => {
@@ -84,6 +89,61 @@ export default function Home(): React.ReactNode {
     return (): void => clearInterval(interval);
   }, [fetchData]);
 
+  // Handle new verdict from scan input
+  const handleVerdictReceived = useCallback(
+    (v: Record<string, unknown>): void => {
+      const newVerdict = v as unknown as Verdict;
+      setVerdicts((prev) => [newVerdict, ...prev]);
+
+      // Animate the new verdict sliding in
+      requestAnimationFrame(() => {
+        const el = newVerdictRef.current;
+        if (el) {
+          gsap.fromTo(
+            el,
+            { opacity: 0, y: -20, scale: 0.98 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.4,
+              ease: "power2.out",
+            },
+          );
+        }
+      });
+    },
+    [],
+  );
+
+  // Handle "Scan Again" from verdict row
+  const handleScanAgain = useCallback(
+    async (token: string): Promise<void> => {
+      try {
+        const res = await fetch(`${API_URL}/api/scan/${token}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Payment": JSON.stringify({
+              signature: "0xsentinel",
+              payer: "0x0000000000000000000000000000000000000000",
+              serviceId: 2,
+            }),
+          },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          verdict?: Record<string, unknown>;
+        };
+        const newVerdict = (data.verdict ?? data) as unknown as Verdict;
+        setVerdicts((prev) => [newVerdict, ...prev]);
+      } catch {
+        // silent fail
+      }
+    },
+    [],
+  );
+
   // GSAP entrance animations
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -109,6 +169,24 @@ export default function Home(): React.ReactNode {
         statsRef.current,
         { opacity: 0, y: 8 },
         { opacity: 1, y: 0, duration: 0.4, delay: 0.15, ease: "power2.out" },
+      );
+    }
+
+    // Scan input
+    if (scanInputRef.current) {
+      gsap.fromTo(
+        scanInputRef.current,
+        { opacity: 0, y: 8 },
+        { opacity: 1, y: 0, duration: 0.4, delay: 0.2, ease: "power2.out" },
+      );
+    }
+
+    // Agent panel
+    if (agentPanelRef.current) {
+      gsap.fromTo(
+        agentPanelRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.3, delay: 0.25, ease: "power2.out" },
       );
     }
 
@@ -182,6 +260,16 @@ export default function Home(): React.ReactNode {
         />
       </div>
 
+      {/* Scan input */}
+      <div ref={scanInputRef}>
+        <ScanInput onVerdictReceived={handleVerdictReceived} />
+      </div>
+
+      {/* Agent panel */}
+      <div ref={agentPanelRef}>
+        <AgentPanel />
+      </div>
+
       {/* Threat feed */}
       <div className="mb-10">
         <div ref={feedTitleRef} className="flex items-center gap-2 mb-4">
@@ -196,9 +284,13 @@ export default function Home(): React.ReactNode {
 
         {verdicts.length === 0 ? (
           <div className="py-16 text-center border border-[#1a1d24]/30 rounded-md">
-            <Search className="h-5 w-5 text-[#1a1d24] mx-auto mb-3" />
-            <p className="text-xs text-[#7a7f8a]/40">
-              Sentinel is scanning... Verdicts will appear here.
+            <Shield className="h-8 w-8 text-[#1a1d24] mx-auto mb-4" />
+            <p className="text-sm text-[#7a7f8a]/60 mb-1">
+              No verdicts yet
+            </p>
+            <p className="text-xs text-[#7a7f8a]/30 max-w-sm mx-auto">
+              Enter a token address above to scan, or wait for the autonomous
+              scanner to discover tokens.
             </p>
           </div>
         ) : (
@@ -210,9 +302,13 @@ export default function Home(): React.ReactNode {
               <VerdictRow
                 key={`${v.token}-${v.timestamp}`}
                 ref={(el) => {
+                  if (i === 0) {
+                    newVerdictRef.current = el;
+                  }
                   verdictRowRefs.current[i] = el;
                 }}
                 verdict={v}
+                onScanAgain={handleScanAgain}
               />
             ))}
           </div>

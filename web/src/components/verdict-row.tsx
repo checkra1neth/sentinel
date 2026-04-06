@@ -1,7 +1,8 @@
 "use client";
 
-import { forwardRef, useState } from "react";
-import { ExternalLink, ChevronDown } from "lucide-react";
+import { forwardRef, useState, useRef, useEffect } from "react";
+import { ExternalLink, ChevronDown, RefreshCw } from "lucide-react";
+import gsap from "gsap";
 
 interface Verdict {
   token: string;
@@ -57,9 +58,11 @@ function formatUsd(value: number): string {
 
 export const VerdictRow = forwardRef<
   HTMLDivElement,
-  { verdict: Verdict }
->(function VerdictRow({ verdict }, ref) {
+  { verdict: Verdict; onScanAgain?: (token: string) => void }
+>(function VerdictRow({ verdict, onScanAgain }, ref) {
   const [expanded, setExpanded] = useState(false);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const chevronRef = useRef<SVGSVGElement>(null);
   const color = VERDICT_COLORS[verdict.verdict] ?? VERDICT_COLORS.CAUTION;
   const bgColor = VERDICT_BG[verdict.verdict] ?? VERDICT_BG.CAUTION;
 
@@ -73,6 +76,45 @@ export const VerdictRow = forwardRef<
   if (verdict.holderConcentration > 50)
     risks.push(`${verdict.holderConcentration}% whale`);
   if (verdict.risks?.length) risks.push(...verdict.risks);
+
+  useEffect(() => {
+    const el = detailRef.current;
+    const chevron = chevronRef.current;
+    if (!el) return;
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (prefersReducedMotion) {
+      el.style.height = expanded ? "auto" : "0px";
+      el.style.opacity = expanded ? "1" : "0";
+      return;
+    }
+
+    if (expanded) {
+      gsap.set(el, { height: "auto", opacity: 1 });
+      const endHeight = el.scrollHeight;
+      gsap.fromTo(
+        el,
+        { height: 0, opacity: 0 },
+        { height: endHeight, opacity: 1, duration: 0.3, ease: "power2.out" },
+      );
+      if (chevron) {
+        gsap.to(chevron, { rotation: 180, duration: 0.2, ease: "power2.out" });
+      }
+    } else {
+      gsap.to(el, {
+        height: 0,
+        opacity: 0,
+        duration: 0.25,
+        ease: "power2.in",
+      });
+      if (chevron) {
+        gsap.to(chevron, { rotation: 0, duration: 0.2, ease: "power2.in" });
+      }
+    }
+  }, [expanded]);
 
   return (
     <div ref={ref} className="group">
@@ -129,54 +171,89 @@ export const VerdictRow = forwardRef<
 
         {/* Expand indicator */}
         <ChevronDown
-          className={`h-3.5 w-3.5 text-[#7a7f8a]/40 shrink-0 transition-transform duration-200 ${
-            expanded ? "rotate-180" : ""
-          }`}
+          ref={chevronRef}
+          className="h-3.5 w-3.5 text-[#7a7f8a]/40 shrink-0"
         />
       </div>
 
-      {/* Expanded details */}
+      {/* Expanded details - GSAP animated */}
       <div
-        className="overflow-hidden transition-all duration-300 ease-in-out"
-        style={{
-          maxHeight: expanded ? "200px" : "0px",
-          opacity: expanded ? 1 : 0,
-        }}
+        ref={detailRef}
+        className="overflow-hidden"
+        style={{ height: 0, opacity: 0 }}
       >
         <div
-          className="px-4 pb-3 pt-1 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs"
+          className="px-4 pb-4 pt-2"
           style={{ borderLeft: `3px solid ${color}`, marginLeft: 0 }}
         >
-          {/* Price */}
-          <div>
-            <span className="text-[#7a7f8a]">Price </span>
-            <span className="text-[#e8eaed] tabular-nums font-mono">
-              {formatUsd(verdict.priceUsd)}
-            </span>
-          </div>
-
-          {/* Liquidity */}
-          <div>
-            <span className="text-[#7a7f8a]">Liquidity </span>
-            <span className="text-[#e8eaed] tabular-nums font-mono">
-              {formatUsd(verdict.liquidityUsd)}
-            </span>
-          </div>
-
-          {/* LP invested */}
-          {verdict.lpInvested && (
+          {/* Market data row */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs mb-3">
             <div>
-              <span className="text-[#7a7f8a]">LP </span>
-              <span className="text-[#34d399] tabular-nums font-mono">
-                {verdict.lpInvested}
+              <span className="text-[#7a7f8a]">Price </span>
+              <span className="text-[#e8eaed] tabular-nums font-mono">
+                {formatUsd(verdict.priceUsd)}
               </span>
             </div>
-          )}
+            <div>
+              <span className="text-[#7a7f8a]">MCap </span>
+              <span className="text-[#e8eaed] tabular-nums font-mono">
+                {formatUsd(verdict.marketCap)}
+              </span>
+            </div>
+            <div>
+              <span className="text-[#7a7f8a]">Liquidity </span>
+              <span className="text-[#e8eaed] tabular-nums font-mono">
+                {formatUsd(verdict.liquidityUsd)}
+              </span>
+            </div>
+            {verdict.lpInvested && (
+              <div>
+                <span className="text-[#7a7f8a]">LP </span>
+                <span className="text-[#34d399] tabular-nums font-mono">
+                  {verdict.lpInvested}
+                </span>
+              </div>
+            )}
+          </div>
 
-          {/* Risks */}
+          {/* Tax info */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs mb-3">
+            <div>
+              <span className="text-[#7a7f8a]">Buy Tax </span>
+              <span
+                className="tabular-nums font-mono"
+                style={{ color: verdict.buyTax > 5 ? "#ef4444" : "#e8eaed" }}
+              >
+                {verdict.buyTax}%
+              </span>
+            </div>
+            <div>
+              <span className="text-[#7a7f8a]">Sell Tax </span>
+              <span
+                className="tabular-nums font-mono"
+                style={{ color: verdict.sellTax > 5 ? "#ef4444" : "#e8eaed" }}
+              >
+                {verdict.sellTax}%
+              </span>
+            </div>
+            <div>
+              <span className="text-[#7a7f8a]">Holders </span>
+              <span
+                className="tabular-nums font-mono"
+                style={{
+                  color:
+                    verdict.holderConcentration > 50 ? "#f59e0b" : "#e8eaed",
+                }}
+              >
+                {verdict.holderConcentration}% top
+              </span>
+            </div>
+          </div>
+
+          {/* Full risks list */}
           {risks.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {risks.slice(0, 4).map((risk) => (
+            <div className="flex items-center gap-1.5 flex-wrap mb-3">
+              {risks.map((risk) => (
                 <span
                   key={risk}
                   className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider"
@@ -191,18 +268,41 @@ export const VerdictRow = forwardRef<
             </div>
           )}
 
-          {/* TX link */}
-          {verdict.txHash && (
+          {/* Actions row */}
+          <div className="flex items-center gap-4">
+            {verdict.txHash && (
+              <a
+                href={`https://www.oklink.com/xlayer/tx/${verdict.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:text-[#818cf8] transition-colors"
+              >
+                <span>View tx</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
             <a
-              href={`https://www.oklink.com/xlayer/tx/${verdict.txHash}`}
+              href={`https://www.oklink.com/xlayer/address/${verdict.token}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[#6366f1] hover:text-[#818cf8] transition-colors"
+              className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:text-[#818cf8] transition-colors"
             >
-              <span>tx</span>
+              <span>Contract</span>
               <ExternalLink className="h-3 w-3" />
             </a>
-          )}
+            {onScanAgain && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onScanAgain(verdict.token);
+                }}
+                className="inline-flex items-center gap-1 text-xs text-[#7a7f8a] hover:text-[#e8eaed] transition-colors cursor-pointer"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>Scan Again</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
