@@ -207,112 +207,192 @@ export class AnalystAgent extends BaseAgent {
       // Uniswap pool not available
     }
 
-    // 8. Risk scoring
+    // 8. Risk scoring — multi-source intelligence
     const risks: string[] = [];
     let riskScore = 0;
 
-    // OKX security scan returns: isRiskToken, buyTaxes, sellTaxes
-    // Also check legacy fields for OKX fallback API
-    const isRiskToken =
-      securityScan?.isRiskToken === true;
+    // --- Source A: OKX Security Scan (honeypot, tax, risk flag) ---
+    const isRiskToken = securityScan?.isRiskToken === true;
     const isHoneypot =
-      securityScan?.isHoneypot === true ||
-      securityScan?.isHoneypot === "1";
+      securityScan?.isHoneypot === true || securityScan?.isHoneypot === "1";
+    const buyTax = Number(securityScan?.buyTaxes ?? securityScan?.buyTax ?? 0);
+    const sellTax = Number(securityScan?.sellTaxes ?? securityScan?.sellTax ?? 0);
+
     if (isHoneypot) {
       risks.push("honeypot");
       riskScore += 50;
     }
     if (isRiskToken && !isHoneypot) {
-      risks.push("risk_token");
+      risks.push("flagged_risk_token");
+      riskScore += 25;
+    }
+    if (buyTax > 10 || sellTax > 10) {
+      risks.push(`high_tax(buy:${buyTax}%,sell:${sellTax}%)`);
+      riskScore += 25;
+    } else if (buyTax > 5 || sellTax > 5) {
+      risks.push(`moderate_tax(buy:${buyTax}%,sell:${sellTax}%)`);
+      riskScore += 12;
+    }
+
+    // --- Source B: OKX Advanced Info (native risk level, LP, holders, tags) ---
+    // riskControlLevel: 0=high risk, 1=medium, 2=low
+    const okxRiskLevel = Number(advData?.riskControlLevel ?? -1);
+    if (okxRiskLevel === 0) {
+      risks.push("okx_high_risk");
       riskScore += 30;
+    } else if (okxRiskLevel === 1) {
+      risks.push("okx_medium_risk");
+      riskScore += 10;
     }
 
-    const hasRug =
-      devData?.rugHistory === true ||
-      devData?.hasRug === true ||
-      (Array.isArray(devData?.rugs) && (devData.rugs as unknown[]).length > 0);
-    if (hasRug) {
-      risks.push("rug_history");
-      riskScore += 40;
+    const lpBurnedPercent = Number(advData?.lpBurnedPercent ?? 0);
+    const top10Hold = Number(advData?.top10HoldPercent ?? advData?.topHolderPercent ?? 0);
+    const devHold = Number(advData?.devHoldingPercent ?? 0);
+    const sniperHold = Number(advData?.sniperHoldingPercent ?? 0);
+    const bundleHold = Number(advData?.bundleHoldingPercent ?? 0);
+    const suspiciousHold = Number(advData?.suspiciousHoldingPercent ?? 0);
+    const tokenTags = (Array.isArray(advData?.tokenTags) ? advData.tokenTags : []) as string[];
+
+    // LP not burned = higher risk for small tokens (burned is good)
+    // Skip for large-cap tokens where LP burn isn't relevant
+    const marketCapForLp = Number(priceData?.marketCap ?? 0);
+    if (lpBurnedPercent > 0 && lpBurnedPercent < 50 && marketCapForLp < 1_000_000) {
+      risks.push(`lp_partially_burned(${lpBurnedPercent.toFixed(0)}%)`);
+      riskScore += 8;
     }
 
-    const hasMint =
-      securityScan?.isMintable === true ||
-      securityScan?.isMintable === "1" ||
-      owner !== null; // has owner = can potentially mint
-    if (securityScan?.isMintable === true || securityScan?.isMintable === "1") {
-      risks.push("mint");
+    // Top 10 holder concentration
+    if (top10Hold > 50) {
+      risks.push(`top10_hold_${top10Hold.toFixed(1)}%`);
       riskScore += 20;
-    }
-
-    const isProxy =
-      securityScan?.isProxy === true ||
-      securityScan?.isProxy === "1" ||
-      proxiableUUID !== null;
-    if (isProxy) {
-      risks.push("proxy");
-      riskScore += 15;
-    }
-
-    // OKX CLI returns buyTaxes/sellTaxes (with "es"), fallback to buyTax/sellTax
-    const buyTax = Number(securityScan?.buyTaxes ?? securityScan?.buyTax ?? 0);
-    const sellTax = Number(securityScan?.sellTaxes ?? securityScan?.sellTax ?? 0);
-    if (buyTax > 5 || sellTax > 5) {
-      risks.push("high_tax");
-      riskScore += 15;
-    }
-
-    // Owner concentration — any contract with an owner() is centralized
-    if (owner !== null) {
-      risks.push("has_owner");
+    } else if (top10Hold > 30) {
+      risks.push(`top10_hold_${top10Hold.toFixed(1)}%`);
+      riskScore += 10;
+    } else if (top10Hold > 15) {
+      risks.push(`top10_hold_${top10Hold.toFixed(1)}%`);
       riskScore += 5;
     }
 
-    const holderConcentration = Number(
-      advData?.topHolderPercent ??
-        advData?.holderConcentration ??
-        (devTags?.top10HoldingsPercent ? Number(devTags.top10HoldingsPercent) * 100 : 0),
-    );
-    if (holderConcentration > 70) {
-      risks.push("concentrated_holders");
+    // Dev still holding significant amount
+    if (devHold > 10) {
+      risks.push(`dev_holds_${devHold.toFixed(1)}%`);
+      riskScore += 20;
+    } else if (devHold > 3) {
+      risks.push(`dev_holds_${devHold.toFixed(1)}%`);
+      riskScore += 8;
+    }
+
+    // Snipers — bots that bought at launch
+    if (sniperHold > 10) {
+      risks.push(`snipers_${sniperHold.toFixed(1)}%`);
+      riskScore += 15;
+    } else if (sniperHold > 3) {
+      risks.push(`snipers_${sniperHold.toFixed(1)}%`);
+      riskScore += 5;
+    }
+
+    // Bundle / wash trading wallets
+    if (bundleHold > 5) {
+      risks.push(`bundlers_${bundleHold.toFixed(1)}%`);
+      riskScore += 12;
+    }
+
+    // Suspicious wallets (phishing etc)
+    if (suspiciousHold > 1) {
+      risks.push(`suspicious_wallets_${suspiciousHold.toFixed(1)}%`);
+      riskScore += 15;
+    }
+
+    // OKX token tags — semantic risk signals
+    for (const tag of tokenTags) {
+      if (tag.includes("RugPull") || tag.includes("rugPull")) {
+        risks.push("tag:rug_pull");
+        riskScore += 40;
+      }
+      if (tag.includes("volumeSurge") || tag.includes("VolumeSurge")) {
+        risks.push("tag:volume_surge");
+        riskScore += 3;
+      }
+      if (tag.includes("devSellAll") || tag.includes("SellAll")) {
+        risks.push("tag:dev_sold_all");
+        // Not necessarily bad — dev selling = decentralizing
+      }
+    }
+
+    // --- Source C: Dev/Rug history from memepump ---
+    const devRugPullCount = Number(advData?.devRugPullTokenCount ?? 0);
+    const hasRug =
+      devRugPullCount > 0 ||
+      devData?.rugHistory === true ||
+      devData?.hasRug === true;
+    if (hasRug) {
+      risks.push(`rug_history(${devRugPullCount} rugs)`);
+      riskScore += 40;
+    }
+
+    // --- Source D: Bytecode probe (owner, proxy) ---
+    const hasMint =
+      securityScan?.isMintable === true || securityScan?.isMintable === "1";
+    if (hasMint) {
+      risks.push("mintable");
+      riskScore += 20;
+    }
+
+    const isProxy = proxiableUUID !== null ||
+      securityScan?.isProxy === true || securityScan?.isProxy === "1";
+    if (isProxy) {
+      risks.push("upgradeable_proxy");
+      riskScore += 15;
+    }
+
+    if (owner !== null && !isProxy) {
+      risks.push("has_owner");
+      riskScore += 8;
+    }
+
+    // --- Source E: Liquidity analysis ---
+    // Skip liquidity penalty for large-cap tokens (stablecoins, wrapped native etc)
+    const marketCap = Number(priceData?.marketCap ?? 0);
+    const price = Number(priceData?.price ?? 0);
+    const isLargeCap = marketCap > 1_000_000;
+    const isStablecoin = price > 0.9 && price < 1.1 && marketCap > 100_000;
+
+    if (!isLargeCap && !isStablecoin) {
+      if (liquidityUsd === 0) {
+        risks.push("no_liquidity");
+        riskScore += 30;
+      } else if (liquidityUsd < 1000) {
+        risks.push(`dust_liquidity($${liquidityUsd.toFixed(0)})`);
+        riskScore += 25;
+      } else if (liquidityUsd < 10000) {
+        risks.push(`low_liquidity($${liquidityUsd.toFixed(0)})`);
+        riskScore += 15;
+      } else if (liquidityUsd < 50000) {
+        risks.push(`thin_liquidity($${Math.round(liquidityUsd / 1000)}k)`);
+        riskScore += 5;
+      }
+    }
+
+    // --- Source F: Price action (pump & dump signals) ---
+    const priceChange1H = Number(priceData?.priceChange1H ?? 0);
+    const priceChange24H = Number(priceData?.priceChange24H ?? 0);
+    if (Math.abs(priceChange1H) > 50) {
+      risks.push(`volatile_1h(${priceChange1H > 0 ? "+" : ""}${priceChange1H.toFixed(0)}%)`);
+      riskScore += 10;
+    }
+    if (priceChange24H < -70) {
+      risks.push(`crash_24h(${priceChange24H.toFixed(0)}%)`);
+      riskScore += 15;
+    }
+
+    // --- Source G: Age & activity ---
+    const holders = Number(priceData?.holders ?? advData?.totalHolders ?? 0);
+    if (holders > 0 && holders < 10) {
+      risks.push(`tiny_community(${holders} holders)`);
       riskScore += 10;
     }
 
-    // Very low liquidity is a risk
-    if (liquidityUsd > 0 && liquidityUsd < 10000) {
-      risks.push("low_liquidity");
-      riskScore += 10;
-    }
-
-    // Memepump intelligence — devTags from OKX
-    if (devTags) {
-      const insidersPercent = Number(devTags.insidersPercent ?? 0);
-      const snipersPercent = Number(devTags.snipersPercent ?? 0);
-      const devHoldingsPercent = Number(devTags.devHoldingsPercent ?? 0);
-      const top10HoldingsPercent = Number(devTags.top10HoldingsPercent ?? 0);
-      const bundlersPercent = Number(devTags.bundlersPercent ?? 0);
-
-      if (insidersPercent > 0.1) {
-        risks.push("insiders_" + (insidersPercent * 100).toFixed(0) + "%");
-        riskScore += 15;
-      }
-      if (snipersPercent > 0.05) {
-        risks.push("snipers_" + (snipersPercent * 100).toFixed(0) + "%");
-        riskScore += 10;
-      }
-      if (devHoldingsPercent > 0.1) {
-        risks.push("dev_holdings_" + (devHoldingsPercent * 100).toFixed(0) + "%");
-        riskScore += 15;
-      }
-      if (top10HoldingsPercent > 0.5) {
-        risks.push("top10_holds_" + (top10HoldingsPercent * 100).toFixed(0) + "%");
-        riskScore += 10;
-      }
-      if (bundlersPercent > 0.05) {
-        risks.push("bundlers_" + (bundlersPercent * 100).toFixed(0) + "%");
-        riskScore += 10;
-      }
-    }
+    const holderConcentration = top10Hold;
 
     riskScore = Math.min(riskScore, 100);
 
