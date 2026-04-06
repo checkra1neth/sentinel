@@ -1,12 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import { x402Middleware } from "./x402-middleware.js";
-import { getActiveServices, getAgentYield, getUsdtBalance } from "../contracts/client.js";
-import { type Address } from "viem";
 import { type BaseAgent } from "../agents/base-agent.js";
+import { type ExecutorAgent } from "../agents/executor-agent.js";
+import { verdictStore } from "../verdicts/verdict-store.js";
 import { eventBus } from "../events/event-bus.js";
 
 // ---------------------------------------------------------------------------
-// Router factory — accepts agents from index.ts
+// Router factory — accepts agents map from index.ts
 // ---------------------------------------------------------------------------
 
 export function createServiceRouter(
@@ -23,41 +23,32 @@ export function createServiceRouter(
   });
 
   // -------------------------------------------------------------------------
-  // On-chain services
+  // Verdicts — free public feed
   // -------------------------------------------------------------------------
 
-  router.get("/services", async (_req: Request, res: Response): Promise<void> => {
-    try {
-      const services = await getActiveServices();
-      const serialized = (services as Record<string, unknown>[]).map((s) => ({
-        id: Number(s.id),
-        agent: s.agent,
-        serviceType: s.serviceType,
-        endpoint: s.endpoint,
-        priceUsdt: Number(s.priceUsdt) / 1e6,
-        active: s.active,
-      }));
-      res.json({ services: serialized });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: message });
-    }
+  router.get("/verdicts", (req: Request, res: Response): void => {
+    const limit = Number(req.query.limit ?? 50);
+    const verdicts = verdictStore.getRecent(limit);
+    res.json({ verdicts });
   });
 
+  // -------------------------------------------------------------------------
+  // Verdict detail — x402 paywall (0.50 USDT)
+  // -------------------------------------------------------------------------
+
   router.get(
-    "/services/:agentAddress/stats",
+    "/verdicts/:token",
+    x402Middleware(2, "0.50"),
     async (req: Request, res: Response): Promise<void> => {
       try {
-        const agentAddress = req.params.agentAddress as Address;
-        const [balance, yield_] = await Promise.all([
-          getUsdtBalance(agentAddress),
-          getAgentYield(agentAddress),
-        ]);
-        res.json({
-          agent: agentAddress,
-          balance: balance.toString(),
-          yield: yield_.toString(),
-        });
+        const { token } = req.params;
+        const analyst = agents["2"];
+        if (!analyst) {
+          res.status(503).json({ error: "Analyst agent not available" });
+          return;
+        }
+        const result = await analyst.execute("report", { token });
+        res.json({ verdict: result });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         res.status(500).json({ error: message });
@@ -66,7 +57,99 @@ export function createServiceRouter(
   );
 
   // -------------------------------------------------------------------------
-  // Service execution (x402 gated)
+  // Manual scan — x402 paywall (0.10 USDT)
+  // -------------------------------------------------------------------------
+
+  router.post(
+    "/scan/:token",
+    x402Middleware(2, "0.10"),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const { token } = req.params;
+        const analyst = agents["2"];
+        if (!analyst) {
+          res.status(503).json({ error: "Analyst agent not available" });
+          return;
+        }
+        const result = await analyst.execute("scan", { token });
+        res.json({ verdict: result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        res.status(500).json({ error: message });
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Agents overview
+  // -------------------------------------------------------------------------
+
+  router.get("/agents", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const agentList = await Promise.all(
+        Object.entries(agents).map(async ([id, agent]) => {
+          let usdtBalance = "0";
+          try {
+            usdtBalance = await agent.wallet.getUsdtBalance();
+          } catch {
+            // Balance fetch may fail if wallet not configured
+          }
+          return {
+            id,
+            name: agent.name,
+            walletAddress: agent.walletAddress,
+            usdtBalance,
+          };
+        }),
+      );
+      res.json({ agents: agentList });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Portfolio — Executor LP positions
+  // -------------------------------------------------------------------------
+
+  router.get("/portfolio", (_req: Request, res: Response): void => {
+    const executor = agents["3"] as ExecutorAgent | undefined;
+    if (!executor) {
+      res.status(503).json({ error: "Executor agent not available" });
+      return;
+    }
+
+    const positions = executor.lpPositions;
+    const totalInvested = positions.reduce(
+      (sum, p) => sum + Number(p.amountInvested),
+      0,
+    );
+
+    res.json({ positions, totalInvested });
+  });
+
+  // -------------------------------------------------------------------------
+  // Stats — verdictStore + eventBus
+  // -------------------------------------------------------------------------
+
+  router.get("/stats", (_req: Request, res: Response): void => {
+    const verdictStats = verdictStore.getStats();
+    const eventStats = eventBus.getStats();
+    res.json({ verdicts: verdictStats, events: eventStats });
+  });
+
+  // -------------------------------------------------------------------------
+  // Event history
+  // -------------------------------------------------------------------------
+
+  router.get("/events/history", (req: Request, res: Response): void => {
+    const limit = Number(req.query.limit ?? 100);
+    res.json({ events: eventBus.getHistory(limit) });
+  });
+
+  // -------------------------------------------------------------------------
+  // Generic x402 service execution (inter-agent payments)
   // -------------------------------------------------------------------------
 
   router.post(
@@ -98,91 +181,5 @@ export function createServiceRouter(
     },
   );
 
-  // -------------------------------------------------------------------------
-  // Agents overview
-  // -------------------------------------------------------------------------
-
-  router.get("/agents", async (_req: Request, res: Response): Promise<void> => {
-    try {
-      const agentList = await Promise.all(
-        Object.entries(agents).map(async ([id, agent]) => {
-          let usdtBalance = "0";
-          try {
-            usdtBalance = await agent.wallet.getUsdtBalance();
-          } catch {
-            // Balance fetch may fail if wallet not configured
-          }
-          return {
-            id,
-            name: agent.name,
-            walletAddress: agent.walletAddress,
-            usdtBalance,
-            reinvestConfig: agent.reinvestConfig,
-            services: agent.registeredServices,
-          };
-        }),
-      );
-      res.json({ agents: agentList });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: message });
-    }
-  });
-
-  // -------------------------------------------------------------------------
-  // Agent events
-  // -------------------------------------------------------------------------
-
-  router.get("/agents/:address/events", (req: Request, res: Response): void => {
-    const { address } = req.params;
-    const limit = Number(req.query.limit ?? 50);
-
-    // Find agent name by wallet address
-    const agent = Object.values(agents).find(
-      (a) => a.walletAddress.toLowerCase() === address.toLowerCase(),
-    );
-
-    if (!agent) {
-      // Also try matching by agent name
-      const agentByName = Object.values(agents).find(
-        (a) => a.name.toLowerCase() === address.toLowerCase(),
-      );
-      if (!agentByName) {
-        res.status(404).json({ error: `Agent not found: ${address}` });
-        return;
-      }
-      const filtered = eventBus.getHistory(1000).filter(
-        (e) => e.agent === agentByName.name,
-      );
-      res.json({ events: filtered.slice(-limit) });
-      return;
-    }
-
-    const filtered = eventBus.getHistory(1000).filter(
-      (e) => e.agent === agent.name,
-    );
-    res.json({ events: filtered.slice(-limit) });
-  });
-
-  // -------------------------------------------------------------------------
-  // Economy stats
-  // -------------------------------------------------------------------------
-
-  router.get("/economy/stats", (_req: Request, res: Response): void => {
-    res.json(eventBus.getStats());
-  });
-
-  // -------------------------------------------------------------------------
-  // Event history
-  // -------------------------------------------------------------------------
-
-  router.get("/events/history", (req: Request, res: Response): void => {
-    const limit = Number(req.query.limit ?? 100);
-    res.json({ events: eventBus.getHistory(limit) });
-  });
-
   return router;
 }
-
-// Keep backward-compatible default export for any existing code
-export const serviceRouter = createServiceRouter({});

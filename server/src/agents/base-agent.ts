@@ -65,8 +65,9 @@ export abstract class BaseAgent {
     }
   }
 
-  /** Override in subclasses (e.g. Analyst) to run periodic logic. */
-  async autonomousLoop(): Promise<void> {
+  /** Override in subclasses (e.g. Scanner) to run periodic logic. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async autonomousLoop(): Promise<any> {
     // No-op by default; overridden by agents that need a cron loop
   }
 

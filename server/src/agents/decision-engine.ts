@@ -1,6 +1,8 @@
-import { type BaseAgent } from "./base-agent.js";
+import { type ScannerAgent } from "./scanner-agent.js";
+import { type AnalystAgent } from "./analyst-agent.js";
+import { type ExecutorAgent } from "./executor-agent.js";
 import { type X402Client } from "../payments/x402-client.js";
-import type { AgentEvent } from "../types.js";
+import type { AgentEvent, Verdict } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -8,21 +10,23 @@ import type { AgentEvent } from "../types.js";
 
 export type DecisionEventListener = (event: AgentEvent) => void;
 
-interface AgentEntry {
-  agent: BaseAgent;
+interface AgentEntry<T> {
+  agent: T;
   serviceId: number;
   x402: X402Client;
 }
 
 interface DecisionServices {
-  analyst: AgentEntry;
-  auditor: AgentEntry;
-  trader: AgentEntry;
+  scanner: AgentEntry<ScannerAgent>;
+  analyst: AgentEntry<AnalystAgent>;
+  executor: AgentEntry<ExecutorAgent>;
 }
 
 // ---------------------------------------------------------------------------
 // Decision Engine
 // ---------------------------------------------------------------------------
+
+const MAX_TOKENS_PER_BATCH = 5;
 
 export class DecisionEngine {
   private readonly services: DecisionServices;
@@ -33,99 +37,98 @@ export class DecisionEngine {
   }
 
   /**
-   * Called when the Analyst discovers a token.
-   * Decides whether to buy Auditor scan and/or Trader quote.
+   * Called by cron after Scanner discovers new tokens.
+   * For each token (max 5):
+   *   1. Buy Analyst scan via x402
+   *   2. If verdict is SAFE -> buy Executor invest via x402
+   *   3. Emit events throughout
    */
-  async onAnalystDiscovery(
-    token: string,
-    riskScore: number,
-    recommendation: string,
+  async onTokensDiscovered(
+    tokens: Array<{ address: string; source: string }>,
   ): Promise<void> {
-    this.emitEvent("scan", `Decision engine: evaluating ${token} (risk=${riskScore}, rec=${recommendation})`, {
-      token,
-      riskScore,
-      recommendation,
-    });
+    const batch = tokens.slice(0, MAX_TOKENS_PER_BATCH);
 
-    // Skip tokens that are clearly dangerous
-    if (recommendation === "AVOID") {
-      this.emitEvent("scan", `Skipping ${token}: recommendation is AVOID`, { token });
-      return;
-    }
+    this.emitEvent(
+      "scan",
+      `Decision engine: processing ${batch.length} of ${tokens.length} discovered tokens`,
+      { total: tokens.length, processing: batch.length },
+    );
 
-    // Low risk (< 10) and OPPORTUNITY -> go straight to Trader
-    if (riskScore < 10 && recommendation === "OPPORTUNITY") {
-      this.emitEvent("buy_service", `${token} is low-risk OPPORTUNITY -> buying Trader quote directly`, {
-        token,
-        riskScore,
-      });
-
-      const traderResult = await this.services.trader.x402.buyService(
-        this.services.trader.serviceId,
-        "swap",
-        { fromToken: "USDT", toToken: token, amount: "10" },
-      );
-
-      this.emitEvent(
-        traderResult.success ? "buy_service" : "error",
-        `Trader quote for ${token}: ${traderResult.success ? "OK" : traderResult.error}`,
-        { token, result: traderResult },
-      );
-      return;
-    }
-
-    // Risk 10-60 and not AVOID -> buy Auditor scan first
-    if (riskScore >= 10 && riskScore <= 60) {
-      this.emitEvent("buy_service", `${token} risk=${riskScore} -> buying Auditor scan`, {
-        token,
-        riskScore,
-      });
-
-      const auditResult = await this.services.auditor.x402.buyService(
-        this.services.auditor.serviceId,
-        "quick-scan",
-        { contract: token },
-      );
-
-      if (!auditResult.success) {
-        this.emitEvent("error", `Auditor scan failed for ${token}: ${auditResult.error}`, {
-          token,
+    for (const token of batch) {
+      try {
+        await this.processToken(token.address, token.source);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.emitEvent("error", `Failed to process ${token.address}: ${message}`, {
+          token: token.address,
         });
-        return;
-      }
-
-      // Check audit verdict
-      const auditData = auditResult.result as Record<string, unknown> | undefined;
-      const verdict = auditData?.verdict as string | undefined;
-
-      this.emitEvent("scan", `Audit verdict for ${token}: ${verdict ?? "UNKNOWN"}`, {
-        token,
-        verdict,
-      });
-
-      // If audit passes -> buy Trader quote
-      if (verdict === "CLEAN" || verdict === "LOW_RISK") {
-        this.emitEvent("buy_service", `${token} passed audit -> buying Trader quote`, { token });
-
-        const traderResult = await this.services.trader.x402.buyService(
-          this.services.trader.serviceId,
-          "swap",
-          { fromToken: "USDT", toToken: token, amount: "10" },
-        );
-
-        this.emitEvent(
-          traderResult.success ? "buy_service" : "error",
-          `Trader quote for ${token}: ${traderResult.success ? "OK" : traderResult.error}`,
-          { token, result: traderResult },
-        );
-      } else {
-        this.emitEvent("scan", `${token} failed audit (${verdict}) -> skipping trade`, { token });
       }
     }
   }
 
   onEvent(listener: DecisionEventListener): void {
     this.listeners.push(listener);
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal
+  // -------------------------------------------------------------------------
+
+  private async processToken(address: string, source: string): Promise<void> {
+    // 1. Buy Analyst scan via x402
+    this.emitEvent("buy_service", `Buying Analyst scan for ${address} (${source})`, {
+      token: address,
+      source,
+    });
+
+    const scanResult = await this.services.analyst.x402.buyService(
+      this.services.analyst.serviceId,
+      "scan",
+      { token: address },
+    );
+
+    if (!scanResult.success) {
+      this.emitEvent("error", `Analyst scan failed for ${address}: ${scanResult.error}`, {
+        token: address,
+      });
+      return;
+    }
+
+    const verdict = scanResult.result as Verdict | undefined;
+    const verdictLabel = verdict?.verdict ?? "UNKNOWN";
+    const riskScore = verdict?.riskScore ?? -1;
+
+    this.emitEvent("scan", `Verdict for ${address}: ${verdictLabel} (risk ${riskScore})`, {
+      token: address,
+      verdict: verdictLabel,
+      riskScore,
+    });
+
+    // 2. If SAFE -> buy Executor invest
+    if (verdictLabel === "SAFE") {
+      this.emitEvent("buy_service", `${address} is SAFE -> buying Executor invest`, {
+        token: address,
+      });
+
+      const investResult = await this.services.executor.x402.buyService(
+        this.services.executor.serviceId,
+        "invest",
+        { token: address, amount: "10" },
+      );
+
+      this.emitEvent(
+        investResult.success ? "invest" : "error",
+        investResult.success
+          ? `Invested in ${address} via Executor`
+          : `Executor invest failed for ${address}: ${investResult.error}`,
+        { token: address, result: investResult },
+      );
+    } else {
+      this.emitEvent("scan", `${address} verdict=${verdictLabel} -> skipping invest`, {
+        token: address,
+        verdict: verdictLabel,
+      });
+    }
   }
 
   private emitEvent(

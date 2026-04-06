@@ -3,14 +3,15 @@ import http from "http";
 import { config } from "./config.js";
 import { createServiceRouter } from "./router/service-router.js";
 import { startReinvestScheduler } from "./scheduler/reinvest.js";
-import { startCronLoop } from "./scheduler/cron-loop.js";
+import { startSentinelLoop } from "./scheduler/cron-loop.js";
+import { ScannerAgent } from "./agents/scanner-agent.js";
 import { AnalystAgent } from "./agents/analyst-agent.js";
-import { AuditorAgent } from "./agents/auditor-agent.js";
-import { TraderAgent } from "./agents/trader-agent.js";
+import { ExecutorAgent } from "./agents/executor-agent.js";
 import { DecisionEngine } from "./agents/decision-engine.js";
 import { X402Client } from "./payments/x402-client.js";
 import { eventBus } from "./events/event-bus.js";
 import { createAgentWallets } from "./wallet/agentic-wallet.js";
+import type { BaseAgent } from "./agents/base-agent.js";
 
 // ---------------------------------------------------------------------------
 // 1. Express app + http.Server
@@ -37,26 +38,27 @@ app.use(express.json());
 
 // ---------------------------------------------------------------------------
 // 3. Create Agentic Wallets
+//    analyst wallet -> Scanner, auditor wallet -> Analyst, trader wallet -> Executor
 // ---------------------------------------------------------------------------
 
 const wallets = createAgentWallets();
 
 // ---------------------------------------------------------------------------
-// 4. Create 3 agents with wallets
+// 4. Create 3 Sentinel agents with wallets
 // ---------------------------------------------------------------------------
 
-const analyst = new AnalystAgent(wallets.analyst);
-const auditor = new AuditorAgent(wallets.auditor);
-const trader = new TraderAgent(wallets.trader);
+const scanner = new ScannerAgent(wallets.analyst);
+const analyst = new AnalystAgent(wallets.auditor);
+const executor = new ExecutorAgent(wallets.trader);
 
-const agents: Record<string, import("./agents/base-agent.js").BaseAgent> = {
-  "1": analyst,
-  "2": auditor,
-  "3": trader,
+const agents: Record<string, BaseAgent> = {
+  "1": scanner,
+  "2": analyst,
+  "3": executor,
 };
 
 // ---------------------------------------------------------------------------
-// 5. Wire event listeners to eventBus
+// 5. Wire agent events -> eventBus
 // ---------------------------------------------------------------------------
 
 for (const agent of Object.values(agents)) {
@@ -64,51 +66,59 @@ for (const agent of Object.values(agents)) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Create X402Clients and DecisionEngine
+// 6. Create X402Clients for inter-agent payments
 // ---------------------------------------------------------------------------
 
 const baseUrl = `http://localhost:${config.port}`;
 
-const analystX402 = new X402Client(wallets.analyst, baseUrl);
-const auditorX402 = new X402Client(wallets.auditor, baseUrl);
-const traderX402 = new X402Client(wallets.trader, baseUrl);
+const scannerX402 = new X402Client(wallets.analyst, baseUrl);
+const analystX402 = new X402Client(wallets.auditor, baseUrl);
+const executorX402 = new X402Client(wallets.trader, baseUrl);
 
-// Wire x402 client events to eventBus
-for (const client of [analystX402, auditorX402, traderX402]) {
+// Wire x402 client events -> eventBus
+for (const client of [scannerX402, analystX402, executorX402]) {
   client.onEvent((event) => eventBus.emit(event));
 }
 
+// ---------------------------------------------------------------------------
+// 7. Create DecisionEngine
+// ---------------------------------------------------------------------------
+
 const decisionEngine = new DecisionEngine({
-  analyst: { agent: analyst, serviceId: 1, x402: analystX402 },
-  auditor: { agent: auditor, serviceId: 2, x402: auditorX402 },
-  trader: { agent: trader, serviceId: 3, x402: traderX402 },
+  scanner: { agent: scanner, serviceId: 1, x402: scannerX402 },
+  analyst: { agent: analyst, serviceId: 2, x402: analystX402 },
+  executor: { agent: executor, serviceId: 3, x402: executorX402 },
 });
 
 decisionEngine.onEvent((event) => eventBus.emit(event));
 
 // ---------------------------------------------------------------------------
-// 7. Mount service router (pass agents)
+// 8. Mount service router
 // ---------------------------------------------------------------------------
 
 const serviceRouter = createServiceRouter(agents);
 app.use("/api", serviceRouter);
 
 // ---------------------------------------------------------------------------
-// 8. Attach eventBus WebSocket to server
+// 9. Attach WebSocket
 // ---------------------------------------------------------------------------
 
 eventBus.attachToServer(server);
 
 // ---------------------------------------------------------------------------
-// 9. Start cron loops (analyst + reinvest)
+// 10. Start sentinel cron loop
 // ---------------------------------------------------------------------------
 
-const cronLoop = startCronLoop(
-  { analyst, auditor, trader },
+const sentinelLoop = startSentinelLoop(
+  scanner,
   decisionEngine,
-  { analystCron: config.cron.analystInterval, reinvestCron: config.cron.reinvestInterval },
+  config.cron.analystInterval,
   (event) => eventBus.emit(event),
 );
+
+// ---------------------------------------------------------------------------
+// 11. Start reinvest scheduler
+// ---------------------------------------------------------------------------
 
 const reinvestTask = startReinvestScheduler(
   Object.values(agents),
@@ -117,15 +127,19 @@ const reinvestTask = startReinvestScheduler(
 );
 
 // ---------------------------------------------------------------------------
-// 10. Listen
+// 12. Listen
 // ---------------------------------------------------------------------------
 
 server.listen(config.port, () => {
-  console.log(`[server] Agentra server listening on port ${config.port}`);
-  console.log(`[server] Registered ${Object.keys(agents).length} agents`);
-  console.log(`[server] WebSocket events on ws://localhost:${config.port}/api/events`);
-  console.log(`[server] Analyst cron: ${config.cron.analystInterval}`);
-  console.log(`[server] Reinvest cron: ${config.cron.reinvestInterval}`);
+  console.log("");
+  console.log("\u{1F6E1}\uFE0F  Sentinel Security Oracle");
+  console.log(`Server:    http://localhost:${config.port}`);
+  console.log(`WebSocket: ws://localhost:${config.port}/api/events`);
+  console.log(`Scanner:   ${scanner.walletAddress}`);
+  console.log(`Analyst:   ${analyst.walletAddress}`);
+  console.log(`Executor:  ${executor.walletAddress}`);
+  console.log(`Cron:      ${config.cron.analystInterval}`);
+  console.log("");
 });
 
-export { app, server, agents, decisionEngine, eventBus, cronLoop, reinvestTask };
+export { app, server, agents, decisionEngine, eventBus, sentinelLoop, reinvestTask };

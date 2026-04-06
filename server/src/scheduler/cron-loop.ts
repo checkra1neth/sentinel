@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { type BaseAgent } from "../agents/base-agent.js";
+import { type ScannerAgent } from "../agents/scanner-agent.js";
 import { type DecisionEngine } from "../agents/decision-engine.js";
 import type { AgentEvent } from "../types.js";
 
@@ -7,70 +7,74 @@ import type { AgentEvent } from "../types.js";
 // Types
 // ---------------------------------------------------------------------------
 
-interface CronAgents {
-  analyst: BaseAgent;
-  auditor: BaseAgent;
-  trader: BaseAgent;
-}
-
-interface CronConfig {
-  analystCron: string;
-  reinvestCron: string;
-}
-
-export interface CronResult {
-  analystTask: cron.ScheduledTask;
+export interface SentinelLoopResult {
+  task: cron.ScheduledTask;
   stop: () => void;
 }
 
 // ---------------------------------------------------------------------------
-// Cron Loop
+// Sentinel Cron Loop
 // ---------------------------------------------------------------------------
 
-export function startCronLoop(
-  agents: CronAgents,
+export function startSentinelLoop(
+  scanner: ScannerAgent,
   decisionEngine: DecisionEngine,
-  cronConfig: CronConfig,
+  cronInterval: string,
   onEvent?: (event: AgentEvent) => void,
-): CronResult {
-  const emit = (message: string, details?: Record<string, unknown>): void => {
+): SentinelLoopResult {
+  const emit = (
+    type: AgentEvent["type"],
+    message: string,
+    details?: Record<string, unknown>,
+  ): void => {
     if (!onEvent) return;
     onEvent({
       timestamp: Date.now(),
       agent: "cron-loop",
-      type: "scan",
+      type,
       message,
       details,
     });
   };
 
-  // Schedule analyst autonomous loop
-  const analystTask = cron.schedule(cronConfig.analystCron, async () => {
-    emit("Analyst autonomous loop triggered");
+  const task = cron.schedule(cronInterval, async () => {
+    emit("scan", "Sentinel cron: starting scanner discovery");
 
     try {
-      await agents.analyst.autonomousLoop();
-      emit("Analyst autonomous loop completed");
+      // 1. Scanner discovers new tokens
+      const newTokens = await scanner.autonomousLoop();
+
+      emit("scan", `Scanner found ${newTokens.length} new tokens`, {
+        count: newTokens.length,
+      });
+
+      // 2. If any new tokens -> feed to decision engine
+      if (newTokens.length > 0) {
+        const tokenPayload = newTokens.map((t) => ({
+          address: t.address,
+          source: t.source,
+        }));
+
+        await decisionEngine.onTokensDiscovered(tokenPayload);
+
+        emit("scan", "Sentinel cron: decision engine processing complete", {
+          processed: tokenPayload.length,
+        });
+      } else {
+        emit("scan", "Sentinel cron: no new tokens discovered");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      emit(`Analyst loop failed: ${message}`);
-      if (onEvent) {
-        onEvent({
-          timestamp: Date.now(),
-          agent: "cron-loop",
-          type: "error",
-          message: `Analyst loop error: ${message}`,
-        });
-      }
+      emit("error", `Sentinel cron error: ${message}`);
     }
   });
 
-  console.log(`[cron] Analyst loop scheduled: ${cronConfig.analystCron}`);
+  console.log(`[cron] Sentinel loop scheduled: ${cronInterval}`);
 
   const stop = (): void => {
-    analystTask.stop();
-    console.log("[cron] All cron tasks stopped");
+    task.stop();
+    console.log("[cron] Sentinel loop stopped");
   };
 
-  return { analystTask, stop };
+  return { task, stop };
 }
