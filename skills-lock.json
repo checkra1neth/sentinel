@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "skills": {
+    "configurator": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "251add1c645e4a3063a9f359b25c8da8fa31dc46be9a122dab253644f778cf45"
+    },
+    "deployer": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "73b54e9f79855c470fb2e8ea61ff21fab631e19d011c6fdedc27a41fc0c98f8d"
+    },
+    "liquidity-planner": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "42facfb96be928b35effd960093b1b05ee34c9e5254ed3a2086bf25b4d379cae"
+    },
+    "okx-agentic-wallet": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "dddc8cdd1b8b7a08594bd7c379e67d6d503f9b521bfb569cf3a19adfad7e5085"
+    },
+    "okx-audit-log": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "c635c191954a3ff3aa2146fe8147efdbc40cf76974184eb4d0a7ebf77c16eec3"
+    },
+    "okx-defi-invest": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "0fde67b01b7db1cb9e8807801f1c5cd1efebf321aa3864040a442bf4ba93a2f2"
+    },
+    "okx-defi-portfolio": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "a949a3e4c1c0463945179b9b340592e278a22079f1aeb4663df5b3354a0bf10b"
+    },
+    "okx-dex-market": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "72b8ed44864707adc36d110e840d1b08670df1e2955799ef5c5dadb9995a4e9a"
+    },
+    "okx-dex-signal": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "02935aecf5b8613d89f6d9a5851f52dea71f5f19ee567dd9431d17146ffee66a"
+    },
+    "okx-dex-swap": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "1f5c80af2329037640949bd3cc4e30b3de8d21e7d3b0f6fc70769700247187e8"
+    },
+    "okx-dex-token": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "6fdb7569f79f0f826c7850f16c27109f87b75d5f31fc8ff308ce549f882415fe"
+    },
+    "okx-dex-trenches": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "457998f30aeeb94936ff79e7b0040d0688921ca9d2c520688be0b6b04ef61765"
+    },
+    "okx-onchain-gateway": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "038bf6c5677e854b4f5f5347c728872e2e1700310bbab1ad98dfb090141409d1"
+    },
+    "okx-security": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "b4b09850855e4aec28e08a179241007a6d30f74d2ccda1f42c35d1198d46cd2b"
+    },
+    "okx-wallet-portfolio": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "967852a3455d90761c34938d2277d418ff971612e0f551a7605f1eecc65f2a39"
+    },
+    "okx-x402-payment": {
+      "source": "okx/onchainos-skills",
+      "sourceType": "github",
+      "computedHash": "ee70fba74707f6ecff089c7d7eca7469ee349603bab387694fa2c575f2a4a7c7"
+    },
+    "pay-with-any-token": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "7e8ae15113e4c9e1d32a7d928d8176892a0211cd2520834f78a65b90b6236f68"
+    },
+    "swap-integration": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "3175d202669303732d7147934faedb4a81744e23e5db7c72fae61c2e7bfd7d2c"
+    },
+    "swap-planner": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "976029b4d6ffd2406ba2187e9401017535f88ab444d97e52f1f5b001d8d93b23"
+    },
+    "v4-security-foundations": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "f4d5741e07fcb5e0efabb7700a44e8102b646645b3da2583b823acc9538acf61"
+    },
+    "viem-integration": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "d4ed32df4663a883755039b76f64a85a9a1e4aab0e827ab477ae566c556b4bb6"
+    }
+  }
+}
