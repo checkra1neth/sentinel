@@ -7,10 +7,12 @@ export function NavLogo(): React.ReactNode {
   return (
     <Link
       href="/"
-      className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 transition-colors"
+      className="flex items-center gap-2.5 group transition-colors"
     >
-      <Shield className="h-5 w-5" />
-      <span className="text-lg font-bold tracking-tight">Sentinel</span>
+      <Shield className="h-4.5 w-4.5 text-[#6366f1] group-hover:text-[#818cf8] transition-colors" />
+      <span className="text-sm font-semibold uppercase tracking-[0.2em] text-[#e8eaed] group-hover:text-[#f8fafc] transition-colors">
+        Sentinel
+      </span>
     </Link>
   );
 }
