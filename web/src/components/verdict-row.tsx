@@ -238,7 +238,10 @@ export const VerdictRow = forwardRef<
           {verdict.defiPool && (
             <div>
               <a
-                href={`https://app.uniswap.org/explore/pools/xlayer/${verdict.defiPool.poolAddress}`}
+                href={verdict.defiPool.poolAddress
+                  ? `https://app.uniswap.org/explore/pools/xlayer/${verdict.defiPool.poolAddress}`
+                  : `https://app.uniswap.org/swap?chain=xlayer&outputCurrency=${verdict.token}`
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-[#6366f1]/10 transition-colors"

@@ -174,38 +174,34 @@ export class AnalystAgent extends BaseAgent {
         ),
       ]);
 
-    // 7. Liquidity check
+    // 7. Liquidity check + Uniswap pool address extraction
     const liqResult = onchainosToken.liquidity(tokenAddress, config.chainId);
     const liqRaw = liqResult.success ? liqResult.data : null;
     let liquidityUsd = 0;
+    let uniswapPoolAddress = "";
+
     if (Array.isArray(liqRaw)) {
-      liquidityUsd = (liqRaw as Array<Record<string, unknown>>).reduce(
+      const pools = liqRaw as Array<Record<string, unknown>>;
+      liquidityUsd = pools.reduce(
         (sum, p) => sum + Number(p.liquidityUsd ?? p.tvlUsd ?? 0),
         0,
       );
+
+      // Find best Uniswap pool with a valid address (42 chars = V3 contract, not V4 bytes32)
+      const uniPools = pools
+        .filter((p) => {
+          const proto = String(p.protocolName ?? "").toLowerCase();
+          const addr = String(p.poolAddress ?? "");
+          return proto.includes("uniswap") && addr.length === 42;
+        })
+        .sort((a, b) => Number(b.liquidityUsd ?? 0) - Number(a.liquidityUsd ?? 0));
+
+      if (uniPools.length > 0) {
+        uniswapPoolAddress = String(uniPools[0].poolAddress);
+      }
     } else if (liqRaw && typeof liqRaw === "object") {
       const obj = liqRaw as Record<string, unknown>;
       liquidityUsd = Number(obj.liquidityUsd ?? obj.tvlUsd ?? 0);
-    }
-
-    // Uniswap v3 pool check
-    let hasUniPool = false;
-    try {
-      const usdt = config.contracts.usdt as Address;
-      const poolAddr = await getPool(
-        this.publicClient,
-        tokenAddress as Address,
-        usdt,
-        3000,
-      );
-      if (poolAddr && poolAddr !== ZERO_ADDRESS) {
-        hasUniPool = true;
-        const poolInfo = await getPoolInfo(this.publicClient, poolAddr);
-        const poolLiq = Number(poolInfo.liquidity);
-        if (poolLiq > liquidityUsd) liquidityUsd = poolLiq;
-      }
-    } catch {
-      // Uniswap pool not available
     }
 
     // 8. Risk scoring — multi-source intelligence
@@ -419,29 +415,14 @@ export class AnalystAgent extends BaseAgent {
             const best = [...list].sort(
               (a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0),
             )[0];
-            const bestId = Number(best.investmentId ?? 0);
-
-            // Fetch detail to get pool contract address
-            let poolAddress = "";
-            if (bestId > 0) {
-              try {
-                const detailResult = onchainosDefi.detail(bestId, config.chainId);
-                if (detailResult.success && detailResult.data) {
-                  const detail = detailResult.data as Record<string, unknown>;
-                  poolAddress = String(detail.contract ?? "");
-                }
-              } catch {
-                // detail fetch optional
-              }
-            }
 
             defiPool = {
               name: String(best.name ?? ""),
               platform: String(best.platformName ?? ""),
               apr: String(best.rate ?? "0"),
               tvl: String(best.tvl ?? "0"),
-              investmentId: bestId,
-              poolAddress,
+              investmentId: Number(best.investmentId ?? 0),
+              poolAddress: uniswapPoolAddress,
             };
           }
         }
