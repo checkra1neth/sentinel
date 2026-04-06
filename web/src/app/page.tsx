@@ -1,329 +1,214 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Eye, Shield, Radio } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
+import { Shield, Radar, Eye, Coins, ArrowRight, ExternalLink } from "lucide-react";
 import gsap from "gsap";
-import { VerdictRow } from "../components/verdict-row";
-import { InlineStats } from "../components/inline-stats";
-import { LiveFeed } from "../components/live-feed";
-import { ScanPulse } from "../components/scan-pulse";
-import { ScanInput } from "../components/scan-input";
-import { AgentPanel } from "../components/agent-panel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
-const POLL_INTERVAL = 10_000;
-
-interface Verdict {
-  token: string;
-  tokenName: string;
-  tokenSymbol: string;
-  riskScore: number;
-  verdict: "SAFE" | "CAUTION" | "DANGEROUS";
-  isHoneypot: boolean;
-  hasRug: boolean;
-  hasMint: boolean;
-  isProxy: boolean;
-  buyTax: number;
-  sellTax: number;
-  holderConcentration: number;
-  risks: string[];
-  priceUsd: number;
-  marketCap: number;
-  liquidityUsd: number;
-  timestamp: number;
-  txHash?: string;
-  lpInvested?: string;
-}
 
 interface Stats {
   totalScanned: number;
   totalSafe: number;
   totalCaution: number;
   totalDangerous: number;
-  totalLpInvested: string;
-  lpPnl: string;
-  events: Record<string, unknown>;
+  totalLpInvested: number;
 }
 
-export default function Home(): React.ReactNode {
-  const [verdicts, setVerdicts] = useState<Verdict[]>([]);
+export default function LandingPage(): React.ReactNode {
+  const heroRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const subtitleRef = useRef<HTMLParagraphElement>(null);
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const statsRef = useRef<HTMLDivElement>(null);
+  const archRef = useRef<HTMLDivElement>(null);
+  const flowRef = useRef<HTMLDivElement>(null);
+
   const [stats, setStats] = useState<Stats | null>(null);
 
-  const headerRef = useRef<HTMLDivElement>(null);
-  const statsRef = useRef<HTMLDivElement>(null);
-  const scanInputRef = useRef<HTMLDivElement>(null);
-  const agentPanelRef = useRef<HTMLDivElement>(null);
-  const feedTitleRef = useRef<HTMLDivElement>(null);
-  const feedRef = useRef<HTMLDivElement>(null);
-  const activityRef = useRef<HTMLDivElement>(null);
-  const verdictRowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const newVerdictRef = useRef<HTMLDivElement>(null);
-  const hasAnimated = useRef(false);
-
-  const fetchData = useCallback(async (): Promise<void> => {
+  const fetchStats = useCallback(async (): Promise<void> => {
     try {
-      const [verdictsRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/verdicts?limit=30`),
-        fetch(`${API_URL}/api/stats`),
-      ]);
-
-      if (verdictsRes.ok) {
-        const data = (await verdictsRes.json()) as { verdicts: Verdict[] };
-        setVerdicts(data.verdicts ?? []);
-      }
-
-      if (statsRes.ok) {
-        const data = await statsRes.json();
+      const res = await fetch(`${API_URL}/api/stats`);
+      if (res.ok) {
+        const data = await res.json();
         setStats((data.verdicts ?? data) as Stats);
       }
-    } catch {
-      // server unavailable, keep stale data
-    }
+    } catch { /* */ }
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(() => {
-      fetchData();
-    }, POLL_INTERVAL);
-    return (): void => clearInterval(interval);
-  }, [fetchData]);
+    fetchStats();
+  }, [fetchStats]);
 
-  // Handle new verdict from scan input
-  const handleVerdictReceived = useCallback(
-    (v: Record<string, unknown>): void => {
-      const newVerdict = v as unknown as Verdict;
-      setVerdicts((prev) => [newVerdict, ...prev]);
-
-      // Animate the new verdict sliding in
-      requestAnimationFrame(() => {
-        const el = newVerdictRef.current;
-        if (el) {
-          gsap.fromTo(
-            el,
-            { opacity: 0, y: -20, scale: 0.98 },
-            {
-              opacity: 1,
-              y: 0,
-              scale: 1,
-              duration: 0.4,
-              ease: "power2.out",
-            },
-          );
-        }
-      });
-    },
-    [],
-  );
-
-  // Handle "Scan Again" from verdict row
-  const handleScanAgain = useCallback(
-    async (token: string): Promise<void> => {
-      try {
-        const res = await fetch(`${API_URL}/api/scan/${token}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Payment": JSON.stringify({
-              signature: "0xsentinel",
-              payer: "0x0000000000000000000000000000000000000000",
-              serviceId: 2,
-            }),
-          },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          verdict?: Record<string, unknown>;
-        };
-        const newVerdict = (data.verdict ?? data) as unknown as Verdict;
-        setVerdicts((prev) => [newVerdict, ...prev]);
-      } catch {
-        // silent fail
-      }
-    },
-    [],
-  );
-
-  // GSAP entrance animations
   useEffect(() => {
-    if (hasAnimated.current) return;
-    hasAnimated.current = true;
-
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReducedMotion) return;
 
-    // Header fade in
-    if (headerRef.current) {
-      gsap.fromTo(
-        headerRef.current,
-        { opacity: 0, y: -10 },
-        { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
-      );
-    }
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
 
-    // Stats row fade in
+    // Hero sequence
+    tl.fromTo(titleRef.current, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8 })
+      .fromTo(subtitleRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.4")
+      .fromTo(ctaRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5 }, "-=0.3");
+
+    // Stats counter
     if (statsRef.current) {
-      gsap.fromTo(
-        statsRef.current,
-        { opacity: 0, y: 8 },
-        { opacity: 1, y: 0, duration: 0.4, delay: 0.15, ease: "power2.out" },
-      );
+      tl.fromTo(statsRef.current, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.2");
     }
 
-    // Scan input
-    if (scanInputRef.current) {
-      gsap.fromTo(
-        scanInputRef.current,
-        { opacity: 0, y: 8 },
-        { opacity: 1, y: 0, duration: 0.4, delay: 0.2, ease: "power2.out" },
-      );
+    // Feature grid stagger
+    if (gridRef.current) {
+      const cards = gridRef.current.querySelectorAll("[data-card]");
+      tl.fromTo(cards, { opacity: 0, y: 40, scale: 0.95 }, {
+        opacity: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.12,
+      }, "-=0.3");
     }
 
-    // Agent panel
-    if (agentPanelRef.current) {
-      gsap.fromTo(
-        agentPanelRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.3, delay: 0.25, ease: "power2.out" },
-      );
+    // Architecture
+    if (archRef.current) {
+      tl.fromTo(archRef.current, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.1");
     }
 
-    // Feed title
-    if (feedTitleRef.current) {
-      gsap.fromTo(
-        feedTitleRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.3, delay: 0.3, ease: "power2.out" },
-      );
-    }
-
-    // Activity section
-    if (activityRef.current) {
-      gsap.fromTo(
-        activityRef.current,
-        { opacity: 0, y: 12 },
-        { opacity: 1, y: 0, duration: 0.4, delay: 0.5, ease: "power2.out" },
-      );
+    // Flow steps
+    if (flowRef.current) {
+      const steps = flowRef.current.querySelectorAll("[data-step]");
+      tl.fromTo(steps, { opacity: 0, x: -20 }, {
+        opacity: 1, x: 0, duration: 0.4, stagger: 0.1,
+      }, "-=0.3");
     }
   }, []);
-
-  // Stagger verdict rows when they appear
-  useEffect(() => {
-    if (verdicts.length === 0) return;
-
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    if (prefersReducedMotion) return;
-
-    const validRefs = verdictRowRefs.current.filter(Boolean);
-    if (validRefs.length === 0) return;
-
-    gsap.fromTo(
-      validRefs,
-      { opacity: 0, y: 16 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.35,
-        stagger: 0.05,
-        ease: "power2.out",
-        delay: 0.35,
-      },
-    );
-  }, [verdicts.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
-      {/* Header - left aligned, compact */}
-      <div ref={headerRef} className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-sm font-semibold uppercase tracking-[0.25em] text-[#e8eaed] mb-1">
-            SENTINEL
-          </h1>
-          <p className="text-xs text-[#7a7f8a]">
-            Autonomous Security Oracle
+    <div className="mx-auto max-w-[1400px] px-6 lg:px-10">
+      {/* Hero */}
+      <div ref={heroRef} className="py-20 lg:py-32 text-center">
+        <h1
+          ref={titleRef}
+          className="text-4xl lg:text-6xl font-bold tracking-tight text-[#e8eaed] mb-6 leading-[1.1]"
+          style={{ opacity: 0 }}
+        >
+          Most security tools tell you<br />
+          what&apos;s dangerous.<br />
+          <span className="text-[#6366f1]">Sentinel puts its money<br />on what&apos;s safe.</span>
+        </h1>
+        <p
+          ref={subtitleRef}
+          className="text-lg text-[#7a7f8a] max-w-2xl mx-auto mb-10 leading-relaxed"
+          style={{ opacity: 0 }}
+        >
+          Three autonomous AI agents scan every token on X Layer, publish
+          on-chain security verdicts, and invest in what they verify as safe.
+          Skin in the game.
+        </p>
+        <div ref={ctaRef} className="flex items-center justify-center gap-4" style={{ opacity: 0 }}>
+          <Link
+            href="/feed"
+            className="inline-flex items-center gap-2 rounded-md bg-[#6366f1] px-6 py-3 text-sm font-semibold text-white hover:bg-[#5558e6] hover:shadow-[0_0_24px_rgba(99,102,241,0.3)] transition-all"
+          >
+            Open Threat Feed
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+          <a
+            href="https://github.com/checkra1neth/sentinel"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-[#1a1d24] px-6 py-3 text-sm font-medium text-[#7a7f8a] hover:text-[#e8eaed] hover:border-[#6366f1]/30 transition-all"
+          >
+            GitHub
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </div>
+
+      {/* Live stats */}
+      {stats && (
+        <div ref={statsRef} className="flex justify-center gap-12 mb-20" style={{ opacity: 0 }}>
+          {[
+            { label: "Scanned", value: stats.totalScanned, color: "#e8eaed" },
+            { label: "Safe", value: stats.totalSafe, color: "#34d399" },
+            { label: "Caution", value: stats.totalCaution, color: "#f59e0b" },
+            { label: "Threats", value: stats.totalDangerous, color: "#ef4444" },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <div className="text-3xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
+              <div className="text-[11px] uppercase tracking-[0.15em] text-[#7a7f8a]/60 mt-1">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Feature grid */}
+      <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-20">
+        <div data-card className="rounded-lg border border-[#1a1d24]/50 p-6" style={{ borderTopColor: "#22d3ee", borderTopWidth: 2, opacity: 0 }}>
+          <Radar className="h-5 w-5 text-[#22d3ee] mb-4" />
+          <h3 className="text-sm font-semibold text-[#e8eaed] mb-2">Scanner Agent</h3>
+          <p className="text-xs text-[#7a7f8a] leading-relaxed">
+            Discovers new tokens via OKX dex-trenches, smart money signals, and hot tokens.
+            Runs autonomously every 5 minutes scanning X Layer for new deployments.
           </p>
         </div>
-        <ScanPulse />
-      </div>
-
-      {/* Inline stats row */}
-      <div ref={statsRef} className="mb-10">
-        <InlineStats
-          totalScanned={stats?.totalScanned ?? 0}
-          totalDangerous={stats?.totalDangerous ?? 0}
-          totalSafe={stats?.totalSafe ?? 0}
-          lpInvested={stats?.totalLpInvested ?? "$0"}
-        />
-      </div>
-
-      {/* Scan input */}
-      <div ref={scanInputRef}>
-        <ScanInput onVerdictReceived={handleVerdictReceived} />
-      </div>
-
-      {/* Agent panel */}
-      <div ref={agentPanelRef}>
-        <AgentPanel />
-      </div>
-
-      {/* Threat feed */}
-      <div className="mb-10">
-        <div ref={feedTitleRef} className="flex items-center gap-2 mb-4">
-          <Eye className="h-3.5 w-3.5 text-[#7a7f8a]" />
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#7a7f8a]">
-            Threat Feed
-          </h2>
-          <span className="text-[11px] text-[#7a7f8a]/40 tabular-nums">
-            {verdicts.length}
-          </span>
+        <div data-card className="rounded-lg border border-[#1a1d24]/50 p-6" style={{ borderTopColor: "#6366f1", borderTopWidth: 2, opacity: 0 }}>
+          <Shield className="h-5 w-5 text-[#6366f1] mb-4" />
+          <h3 className="text-sm font-semibold text-[#e8eaed] mb-2">Analyst Agent</h3>
+          <p className="text-xs text-[#7a7f8a] leading-relaxed">
+            Deep security analysis from 7 sources: OKX security scan, risk levels, holder analysis,
+            bytecode probe, liquidity check, price action, and community metrics.
+          </p>
         </div>
-
-        {verdicts.length === 0 ? (
-          <div className="py-16 text-center border border-[#1a1d24]/30 rounded-md">
-            <Shield className="h-8 w-8 text-[#1a1d24] mx-auto mb-4" />
-            <p className="text-sm text-[#7a7f8a]/60 mb-1">
-              No verdicts yet
-            </p>
-            <p className="text-xs text-[#7a7f8a]/30 max-w-sm mx-auto">
-              Enter a token address above to scan, or wait for the autonomous
-              scanner to discover tokens.
-            </p>
-          </div>
-        ) : (
-          <div
-            ref={feedRef}
-            className="rounded-md border border-[#1a1d24]/50 overflow-hidden"
-          >
-            {verdicts.map((v, i) => (
-              <VerdictRow
-                key={`${v.token}-${v.timestamp}`}
-                ref={(el) => {
-                  if (i === 0) {
-                    newVerdictRef.current = el;
-                  }
-                  verdictRowRefs.current[i] = el;
-                }}
-                verdict={v}
-                onScanAgain={handleScanAgain}
-              />
-            ))}
-          </div>
-        )}
+        <div data-card className="rounded-lg border border-[#1a1d24]/50 p-6" style={{ borderTopColor: "#34d399", borderTopWidth: 2, opacity: 0 }}>
+          <Coins className="h-5 w-5 text-[#34d399] mb-4" />
+          <h3 className="text-sm font-semibold text-[#e8eaed] mb-2">Executor Agent</h3>
+          <p className="text-xs text-[#7a7f8a] leading-relaxed">
+            Invests in SAFE-rated tokens via Uniswap LP with risk-based position sizing.
+            Range width adapts to risk score: lower risk = wider exposure.
+          </p>
+        </div>
       </div>
 
-      {/* Agent activity */}
-      <div ref={activityRef}>
-        <div className="flex items-center gap-2 mb-4">
-          <Radio className="h-3.5 w-3.5 text-[#7a7f8a]" />
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#7a7f8a]">
-            Agent Activity
-          </h2>
+      {/* How it works */}
+      <div ref={archRef} className="mb-20" style={{ opacity: 0 }}>
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#7a7f8a] mb-8 text-center">
+          How Sentinel Works
+        </h2>
+        <div ref={flowRef} className="max-w-3xl mx-auto space-y-4">
+          {[
+            { step: "01", title: "Discover", desc: "Scanner finds new tokens on X Layer via OKX OnchainOS skills (dex-trenches, smart money, hot tokens)", color: "#22d3ee" },
+            { step: "02", title: "Analyze", desc: "Analyst performs deep security scan using 7 data sources, calculates risk score 0-100, classifies SAFE / CAUTION / DANGEROUS", color: "#6366f1" },
+            { step: "03", title: "Publish", desc: "Verdict published on-chain to VerdictRegistry smart contract on X Layer. Immutable, verifiable.", color: "#f59e0b" },
+            { step: "04", title: "Invest", desc: "If SAFE: Executor invests in Uniswap LP pool with risk-based range. Skin in the game.", color: "#34d399" },
+            { step: "05", title: "Earn", desc: "LP fees flow back to agent wallets. Agents pay each other via x402 protocol. Self-sustaining economy.", color: "#34d399" },
+          ].map((item) => (
+            <div key={item.step} data-step className="flex items-start gap-4 py-3" style={{ opacity: 0 }}>
+              <span className="text-xs font-mono tabular-nums shrink-0 w-6" style={{ color: item.color }}>{item.step}</span>
+              <div className="h-px flex-shrink-0 w-8 mt-2" style={{ backgroundColor: item.color, opacity: 0.3 }} />
+              <div>
+                <span className="text-sm font-semibold text-[#e8eaed]">{item.title}</span>
+                <p className="text-xs text-[#7a7f8a] mt-0.5 leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
-        <LiveFeed />
+      </div>
+
+      {/* Tech stack */}
+      <div className="text-center pb-20">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#7a7f8a] mb-6">
+          Built With
+        </h2>
+        <div className="flex flex-wrap justify-center gap-3">
+          {[
+            "OKX OnchainOS", "Agentic Wallets", "14 OKX Skills", "8 Uniswap Skills",
+            "x402 Protocol", "VerdictRegistry", "X Layer", "Uniswap V3/V4",
+          ].map((tech) => (
+            <span
+              key={tech}
+              className="rounded-full border border-[#1a1d24] px-3 py-1 text-[11px] text-[#7a7f8a]"
+            >
+              {tech}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
