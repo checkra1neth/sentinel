@@ -1,157 +1,157 @@
-# Agentra Agent Identities
+# Sentinel Agent Identities
 
-This document describes the three autonomous AI agents that power the Agentra economy. Each agent has a dedicated OKX Agentic Wallet (TEE-secured), registers paid services on the on-chain Registry, and participates in the Earn-Pay-Earn cycle via x402 micropayments on X Layer.
+This document describes the three autonomous AI agents that power the Sentinel security oracle. Each agent has a dedicated OKX Agentic Wallet (TEE-secured) and a specific role in the pipeline: discover, analyze, invest.
 
 ## Agent Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         Agent Economy                                │
-│                                                                      │
-│   ┌────────────┐       x402        ┌────────────┐                    │
-│   │  Analyst   │ ────────────────► │  Auditor   │                    │
-│   │  Agent     │  buys quick-scan  │  Agent     │                    │
-│   │            │ ◄──────────────── │            │                    │
-│   │  Earns:    │   returns scan    │  Earns:    │                    │
-│   │  0.50 USDT │                   │  0.20 USDT │                    │
-│   └─────┬──────┘                   └────────────┘                    │
-│         │                                                            │
-│         │ x402 (buys swap quote)                                     │
-│         ▼                                                            │
-│   ┌────────────┐                                                     │
-│   │  Trader    │                                                     │
-│   │  Agent     │ ◄── Earns from external clients needing swaps       │
-│   │            │                                                     │
-│   │  Earns:    │                                                     │
-│   │  0.30 USDT │                                                     │
-│   └────────────┘                                                     │
-│                                                                      │
-│   All profits above threshold ──► Uniswap v3 LP (OKB/USDT)          │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        Sentinel Pipeline                                  │
+│                                                                          │
+│   ┌────────────┐   candidates   ┌────────────┐   SAFE tokens  ┌───────┐ │
+│   │  Scanner   │ ─────────────► │  Analyst   │ ─────────────► │Execut.│ │
+│   │            │                │            │                │       │ │
+│   │  Discover  │                │  Analyze   │                │Invest │ │
+│   │  new tokens│                │  & Verdict │                │in LP  │ │
+│   │            │                │            │                │       │ │
+│   │  0x38c7... │                │  0x8743... │                │0x7500.│ │
+│   └────────────┘                └──────┬─────┘                └───┬───┘ │
+│                                        │                          │     │
+│                                        ▼                          ▼     │
+│                                 VerdictRegistry            Uniswap v3   │
+│                                  (on-chain)               LP Positions  │
+│                                                                          │
+│   Revenue: x402 scan/report fees ──► Operations ──► LP yield            │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Scanner Agent
+
+**Role:** Token discovery and monitoring. The Scanner is the eyes of Sentinel -- it watches X Layer for new tokens, trending activity, and smart money movements.
+
+**Wallet:** `0x38c7b7651b42cd5d0e9fe1909f52b6fd8e044db2`
+
+### OnchainOS Skills Used
+
+| Skill | Usage |
+|-------|-------|
+| `okx-agentic-wallet` | Wallet identity and balance checks |
+| `okx-dex-token` | New token detection, metadata, liquidity data |
+| `okx-dex-signal` | Smart money activity tracking, on-chain signals |
+| `okx-dex-trenches` | Trending tokens and narratives on X Layer |
+| `okx-dex-market` | Real-time pricing for candidate filtering |
+| `okx-audit-log` | Log discovery events for transparency |
+
+### Autonomous Loop
+
+Runs on a configurable cron schedule (default: every 15 minutes):
+1. Queries `okx-dex-trenches` for newly listed tokens on X Layer
+2. Fetches smart money signals via `okx-dex-signal`
+3. Filters candidates by minimum liquidity threshold and age
+4. Passes qualifying tokens to the Analyst for deep analysis
+
+### What It Does NOT Do
+
+- Does not publish verdicts (that's the Analyst)
+- Does not invest (that's the Executor)
+- Does not accept x402 payments (it's purely internal)
 
 ---
 
 ## Analyst Agent
 
-**Role:** Token discovery, risk analysis, and trending signal aggregation.
+**Role:** Deep security analysis and on-chain verdict publishing. The Analyst is the brain of Sentinel -- it performs comprehensive security scans and publishes immutable verdicts to the VerdictRegistry.
 
-**Service:** `token-report` -- produces a comprehensive analysis including price data, security scan, Uniswap v3 liquidity check, and a risk-scored recommendation.
-
-**Price:** 0.50 USDT per report
-
-**Wallet:** Dedicated Agentic Wallet (account index configured via `ANALYST_ACCOUNT_ID`)
+**Wallet:** `0x874370bc9352bfa4b39c22fa82b89f4ca952ce03`
 
 ### OnchainOS Skills Used
 
 | Skill | Usage |
 |-------|-------|
-| `okx-agentic-wallet` | Wallet identity, balance checks, transaction signing |
-| `okx-x402-payment` | Signing x402 payment proofs when buying Auditor/Trader services |
-| `okx-dex-token` | Token price info, advanced metadata, liquidity data, hot token discovery |
-| `okx-security` | Token risk scanning (honeypot, mintable, proxy, tax detection) |
-| `okx-dex-signal` | Smart money activity tracking for trending token discovery |
+| `okx-agentic-wallet` | Wallet identity, transaction signing for verdict publishing |
+| `okx-x402-payment` | Accepting x402 payments for scan (0.10 USDT) and report (0.50 USDT) endpoints |
+| `okx-security` | Token security scanning (honeypot, mintable, tax, proxy detection) |
+| `okx-onchain-gateway` | Direct RPC calls to probe contract bytecode, read storage, publish verdicts |
+| `okx-dex-token` | Token metadata and liquidity for report enrichment |
 | `okx-dex-market` | Real-time pricing and market data |
+| `okx-wallet-portfolio` | Holder concentration analysis |
+| `okx-audit-log` | Log all verdicts and scans |
 
 ### Uniswap Integration
 
 - Checks Uniswap v3 pool existence and liquidity for analyzed tokens
-- Reads `sqrtPriceX96` and fee tier data from pool contracts
-
-### Autonomous Loop
-
-Runs on a configurable cron schedule (default: every 30 minutes):
-1. Fetches hot/trending tokens via `okx-dex-signal` and `okx-dex-token`
-2. Generates token reports for the top 3 trending tokens
-3. Emits events for the Decision Engine to act on
-
-### Service Buying
-
-- **Buys from Auditor:** Deep security scans when a token's initial risk score warrants further investigation
-- **Buys from Trader:** Swap quotes when a token is classified as OPPORTUNITY
-
----
-
-## Auditor Agent
-
-**Role:** Smart contract and token security analysis.
-
-**Service:** `quick-scan` -- probes on-chain bytecode, detects security patterns, queries OKX security APIs, and returns severity-rated issues.
-
-**Price:** 0.20 USDT per scan
-
-**Wallet:** Dedicated Agentic Wallet (account index configured via `AUDITOR_ACCOUNT_ID`)
-
-### OnchainOS Skills Used
-
-| Skill | Usage |
-|-------|-------|
-| `okx-agentic-wallet` | Wallet identity and transaction signing |
-| `okx-x402-payment` | Accepting x402 payments from Analyst and external clients |
-| `okx-security` | Token security scanning (honeypot, mintable, tax, open source checks) |
-| `okx-onchain-gateway` | Direct RPC calls to probe contract bytecode, read storage, call view functions |
+- Reads `sqrtPriceX96` and fee tier data to assess liquidity health
+- Includes pool data in detailed reports
 
 ### Analysis Pipeline
 
-1. **Bytecode check** -- Verifies the address is a contract (not an EOA) and measures bytecode size
-2. **Interface probing** -- Calls `owner()`, `paused()`, `name()`, `symbol()`, `decimals()`, `totalSupply()`, `proxiableUUID()` to classify contract type (ERC-20, UUPS Proxy, etc.)
-3. **Security scan** -- Queries OnchainOS `security token-scan` with fallback to OKX direct API
-4. **Issue compilation** -- Aggregates findings into severity-rated issues (CRITICAL, HIGH, MEDIUM, LOW, INFO)
-5. **Verdict** -- Computes aggregate risk score and returns CLEAN / LOW_RISK / CAUTION / DANGEROUS
+1. **Bytecode check** -- Verifies the address is a contract and measures bytecode size
+2. **Interface probing** -- Calls `owner()`, `paused()`, `name()`, `symbol()`, `decimals()`, `totalSupply()`, `proxiableUUID()` to classify contract type
+3. **Security scan** -- Queries OnchainOS `security token-scan` for honeypot, mintable, tax, and proxy patterns
+4. **Liquidity analysis** -- Checks Uniswap v3 pool TVL, holder concentration, and top wallet percentages
+5. **Verdict** -- Computes aggregate risk score (0-100) and publishes verdict: SAFE / CAUTION / DANGEROUS
+6. **On-chain publish** -- Writes verdict to VerdictRegistry with report hash
 
-### Service Buying
+### Verdict Levels
 
-- **Does not buy** from other agents -- the Auditor is a pure service provider
+| Level | Risk Score | Meaning | Executor Action |
+|-------|-----------|---------|-----------------|
+| SAFE | 0-30 | No significant risks detected | Invests via LP |
+| CAUTION | 31-70 | Some risks, proceed with care | Does not invest |
+| DANGEROUS | 71-100 | Significant risks (honeypot, rugpull indicators) | Does not invest |
 
-### Earnings
+### Revenue
 
-- Primary income from Analyst agent buying quick-scans during token analysis
-- External clients can also purchase scans directly via the x402-gated API
+- Manual scan requests: 0.10 USDT via x402
+- Detailed report requests: 0.50 USDT via x402
+- Both endpoints are publicly accessible through the API
 
 ---
 
-## Trader Agent
+## Executor Agent
 
-**Role:** Optimal swap execution across multiple DEX routes.
+**Role:** LP investment in safe tokens. The Executor is the wallet of Sentinel -- it puts real capital into tokens the Analyst rates SAFE. This is where "skin in the game" becomes literal.
 
-**Service:** `swap` -- compares routes across Uniswap v3, OKX DEX aggregator, and OnchainOS swap, picks the best price, and optionally executes the trade.
-
-**Price:** 0.30 USDT per swap quote (execution optional)
-
-**Wallet:** Dedicated Agentic Wallet (account index configured via `TRADER_ACCOUNT_ID`)
+**Wallet:** `0x7500350249e155fdacb27dc0a12f5198b158ee00`
 
 ### OnchainOS Skills Used
 
 | Skill | Usage |
 |-------|-------|
-| `okx-agentic-wallet` | Wallet identity, transaction signing, contract calls for swap execution |
-| `okx-x402-payment` | Accepting x402 payments from Analyst and external clients |
-| `okx-dex-swap` | DEX aggregation quotes and execution on X Layer |
-| `okx-dex-token` | Token address resolution and metadata |
-| `okx-dex-market` | Price feeds for slippage calculation |
+| `okx-agentic-wallet` | Wallet identity, transaction signing for LP operations |
+| `okx-dex-swap` | Token swaps for LP entry/exit positions |
+| `okx-dex-token` | Token price and metadata for position sizing |
+| `okx-dex-market` | Real-time pricing for PnL calculation |
+| `okx-defi-invest` | Search Uniswap v3 pools, add/remove liquidity |
+| `okx-defi-portfolio` | Track LP positions, fees earned, and DeFi holdings |
+| `okx-wallet-portfolio` | Aggregate wallet balance across all tokens |
+| `okx-onchain-gateway` | Direct pool contract reads for position management |
+| `okx-audit-log` | Log investment decisions and outcomes |
 
 ### Uniswap Integration
 
-- Queries Uniswap v3 Factory for direct pool availability
-- Reads pool state (`sqrtPriceX96`, liquidity, fee) to estimate output amounts
-- Encodes `exactInputSingle` calldata for Uniswap Router execution
-- Compares Uniswap v3 output against OKX DEX and OnchainOS quotes
+- Queries Uniswap v3 Factory for pool existence for SAFE-rated tokens
+- Analyzes pool metrics (TVL, volume, fee tier) to select optimal positions
+- Adds concentrated liquidity via `liquidity-planner` skill
+- Monitors position PnL and collects accumulated fees
+- Exits positions if a token's verdict is later downgraded
 
-### Route Comparison
+### Investment Rules
 
-The Trader agent evaluates up to 3 routes for every swap:
+1. Only invests in tokens with verdict = SAFE (risk score 0-30)
+2. Maximum position size: configurable per-token cap
+3. Diversification: spreads capital across multiple SAFE tokens
+4. Auto-exit: closes position if the Analyst downgrades the verdict
+5. Fee collection: periodically claims LP fees as additional revenue
 
-| Source | Method |
-|--------|--------|
-| **Uniswap v3** | Direct pool query, price estimation from sqrtPriceX96 |
-| **OKX DEX** | Aggregator API quote with gas estimation |
-| **OnchainOS** | Built-in swap module quote |
+### Risk Exposure
 
-Routes are sorted by output amount (descending). The best route is returned to the client, with alternative routes included for transparency.
-
-### Service Buying
-
-- **Buys from Analyst:** Token intelligence reports before executing large swaps
+The Executor's portfolio is the scoreboard for Sentinel's accuracy:
+- **Good verdicts** = profitable LP positions, fee accumulation
+- **Bad verdicts** = impermanent loss, potential rug pull losses
+- Portfolio PnL is publicly visible via `/sentinel portfolio`
 
 ---
 
@@ -163,7 +163,7 @@ Each agent wraps an `AgenticWallet` instance that interfaces with OKX OnchainOS:
 AgenticWallet {
   accountId: string      // OnchainOS account index
   address: Address       // X Layer wallet address
-  role: string           // "analyst" | "auditor" | "trader"
+  role: string           // "scanner" | "analyst" | "executor"
 
   getBalance(token?)     // Native or ERC-20 balance
   send(amount, to)       // Transfer tokens
@@ -177,15 +177,18 @@ The `createAgentWallets()` factory reads wallet configuration from environment v
 
 ---
 
-## Decision Engine
+## Pipeline Orchestration
 
-The `DecisionEngine` orchestrates inter-agent service buying:
+The pipeline runs autonomously:
 
-1. **Analyst discovers a token** -- Decision Engine evaluates whether the risk score warrants buying an Auditor scan
-2. **Auditor returns scan** -- If the token passes security checks, Decision Engine considers buying a Trader swap quote
-3. **Trader returns quote** -- If the route is favorable, the swap can be executed
+1. **Scanner discovers tokens** -- Feeds candidates to Analyst every 15 minutes
+2. **Analyst runs deep scan** -- Security analysis, liquidity check, holder analysis
+3. **Analyst publishes verdict** -- Writes to VerdictRegistry on-chain
+4. **Executor checks new verdicts** -- Looks for SAFE-rated tokens with adequate liquidity
+5. **Executor invests** -- Opens Uniswap v3 LP positions in SAFE tokens
+6. **Executor monitors** -- Tracks PnL, collects fees, exits on downgrades
 
-All inter-agent purchases flow through the same x402 payment protocol used by external clients -- agents are first-class participants in their own marketplace.
+Manual scan and report requests via x402 bypass step 1 (Scanner) and go directly to the Analyst.
 
 ---
 
@@ -194,21 +197,22 @@ All inter-agent purchases flow through the same x402 payment protocol used by ex
 Environment variables for agent wallets:
 
 ```env
+# Scanner
+SCANNER_ACCOUNT_ID=0
+SCANNER_WALLET_ADDRESS=0x38c7b7651b42cd5d0e9fe1909f52b6fd8e044db2
+
 # Analyst
-ANALYST_ACCOUNT_ID=0
-ANALYST_WALLET_ADDRESS=0x38c7b7651b42cd5d0e9fe1909f52b6fd8e044db2
+ANALYST_ACCOUNT_ID=1
+ANALYST_WALLET_ADDRESS=0x874370bc9352bfa4b39c22fa82b89f4ca952ce03
 
-# Auditor
-AUDITOR_ACCOUNT_ID=1
-AUDITOR_WALLET_ADDRESS=0x874370bc9352bfa4b39c22fa82b89f4ca952ce03
-
-# Trader
-TRADER_ACCOUNT_ID=2
-TRADER_WALLET_ADDRESS=0x7500350249e155fdacb27dc0a12f5198b158ee00
+# Executor
+EXECUTOR_ACCOUNT_ID=2
+EXECUTOR_WALLET_ADDRESS=0x7500350249e155fdacb27dc0a12f5198b158ee00
 ```
 
 Cron schedules:
 ```env
-ANALYST_CRON="*/30 * * * *"      # Analyst autonomous loop (default: every 30 min)
-REINVEST_CRON="0 */6 * * *"      # Treasury reinvestment check (default: every 6 hours)
+SCANNER_CRON="*/15 * * * *"       # Scanner discovery loop (default: every 15 min)
+ANALYST_CRON="*/5 * * * *"        # Analyst verdict processing (default: every 5 min)
+EXECUTOR_CRON="0 */4 * * *"       # Executor investment check (default: every 4 hours)
 ```

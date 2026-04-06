@@ -1,19 +1,18 @@
 # Contract Reference
 
-All Agentra smart contracts are deployed on X Layer (chain ID 196) using the UUPS proxy pattern (EIP-1822). Each contract sits behind an `ERC1967Proxy` with a fixed address that persists across upgrades.
+All Sentinel smart contracts are deployed on X Layer (chain ID 196) using the UUPS proxy pattern (EIP-1822). Each contract sits behind an `ERC1967Proxy` with a fixed address that persists across upgrades.
 
 ## Deployed Addresses
 
-| Contract | Proxy Address | Implementation | Status |
-|----------|--------------|----------------|--------|
-| Registry | `0xDd0FF50142Ab591D2Bc0D0AF5Bf230A9f2B84E86` | `0x100f8AC7808a3E0ad05be037219B58cC4bAE72dA` | Live |
-| Escrow | `0xa80066f2fd7efdFB944ECcb16f67604D33C34333` | `0xb6f6dd1817885d5d0ff6751cf3d5a238dcc075f8` | Live |
-| Treasury | `0x69558a9B4BfE9c759797F5F22896ADB9d509Cb44` | — | Live |
-| USDT | `0x1E4a5963aBFD975d8c9021ce480b42188849D41d` | — | ERC-20 |
-| Uniswap Router | `0x7078c4537C04c2b2E52ddBa06074dBdACF23cA15` | — | Live |
-| OKB | Native | — | Gas token |
-
-> Deployed on X Layer mainnet (chain 196) on April 3, 2026.
+| Contract | Proxy Address | Status |
+|----------|--------------|--------|
+| Registry | `0xDd0FF50142Ab591D2Bc0D0AF5Bf230A9f2B84E86` | Live |
+| Escrow | `0xa80066f2fd7efdFB944ECcb16f67604D33C34333` | Live |
+| Treasury | `0x69558a9B4BfE9c759797F5F22896ADB9d509Cb44` | Live |
+| VerdictRegistry | `TBD` | Not yet deployed |
+| USDT | `0x1E4a5963aBFD975d8c9021ce480b42188849D41d` | ERC-20 |
+| Uniswap Router | `0x7078c4537C04c2b2E52ddBa06074dBdACF23cA15` | Live |
+| OKB | Native | Gas token |
 
 ## Network Configuration
 
@@ -25,153 +24,90 @@ All Agentra smart contracts are deployed on X Layer (chain ID 196) using the UUP
 | Block Explorer | `https://www.okx.com/xlayer/explorer` | `https://www.okx.com/xlayer/explorer/testnet` |
 | Gas Model | Zero gas for most operations | Zero gas |
 
-## Registry
+## VerdictRegistry (Planned)
 
-The Registry contract manages service registration, discovery, and lifecycle.
+The VerdictRegistry is a new contract that stores Sentinel verdicts on-chain. Each verdict is an immutable record tied to a token address.
 
 ### Data Structures
 
 ```solidity
-struct Service {
-    uint256 id;           // Auto-incrementing service ID
-    address agent;        // Agentic Wallet address (service owner)
-    string serviceType;   // Category: "analyst", "auditor", "trader", "code-review"
-    string endpoint;      // HTTPS URL for x402 requests
-    uint256 priceUsdt;    // Price per request in USDT (6 decimals)
-    bool active;          // Whether the service is listed in marketplace
+enum VerdictLevel { SAFE, CAUTION, DANGEROUS }
+
+struct Verdict {
+    uint256 id;              // Auto-incrementing verdict ID
+    address token;           // ERC-20 token address
+    VerdictLevel level;      // SAFE, CAUTION, or DANGEROUS
+    uint256 riskScore;       // 0-100 risk score
+    bytes32 reportHash;      // IPFS hash of the full report
+    address analyst;         // Analyst wallet that produced the verdict
+    uint256 timestamp;       // Block timestamp when published
+    bool executorInvested;   // Whether the Executor opened an LP position
 }
 ```
+
+### Functions (Planned)
+
+| Function | Access | Description |
+|----------|--------|-------------|
+| `publishVerdict(address token, VerdictLevel level, uint256 riskScore, bytes32 reportHash) -> uint256` | Analyst only | Publish a new verdict. Returns verdict ID. |
+| `getVerdict(uint256 verdictId) -> Verdict` | View | Get verdict by ID. |
+| `getVerdictByToken(address token) -> Verdict` | View | Get latest verdict for a token. |
+| `getVerdictHistory(address token) -> Verdict[]` | View | Get all verdicts for a token. |
+| `markInvested(uint256 verdictId)` | Executor only | Mark that the Executor invested in this token. |
+| `verdictCount() -> uint256` | View | Total verdicts published. |
+
+### Events (Planned)
+
+```solidity
+event VerdictPublished(uint256 indexed id, address indexed token, VerdictLevel level, uint256 riskScore);
+event VerdictInvested(uint256 indexed id, address indexed token);
+```
+
+## Registry
+
+The Registry contract manages service registration and discovery. Used by Sentinel to register the scan and report services.
 
 ### Functions
 
 | Function | Access | Description |
 |----------|--------|-------------|
-| `registerService(string serviceType, string endpoint, uint256 priceUsdt) → uint256` | Anyone | Register a new service. Returns the service ID. |
-| `updateService(uint256 serviceId, string endpoint, uint256 priceUsdt)` | Service owner | Update endpoint and/or price of an existing service. |
-| `deactivateService(uint256 serviceId)` | Service owner | Mark service as inactive (removed from marketplace listings). |
-| `getService(uint256 serviceId) → Service` | View | Get a single service by ID. |
-| `getActiveServices() → Service[]` | View | Get all services with `active == true`. |
-| `getServicesByType(string serviceType) → Service[]` | View | Get active services filtered by type. |
-| `getServicesByAgent(address agent) → Service[]` | View | Get all services (active and inactive) for an agent. |
-| `serviceCount() → uint256` | View | Total number of services ever registered. |
-
-### Events
-
-```solidity
-event ServiceRegistered(uint256 indexed id, address indexed agent, string serviceType, uint256 priceUsdt);
-event ServiceUpdated(uint256 indexed id, string endpoint, uint256 priceUsdt);
-event ServiceDeactivated(uint256 indexed id);
-```
+| `registerService(string serviceType, string endpoint, uint256 priceUsdt) -> uint256` | Anyone | Register a new service. Returns service ID. |
+| `updateService(uint256 serviceId, string endpoint, uint256 priceUsdt)` | Owner | Update endpoint or price. |
+| `deactivateService(uint256 serviceId)` | Owner | Deactivate a service. |
+| `getService(uint256 serviceId) -> Service` | View | Get service by ID. |
+| `getActiveServices() -> Service[]` | View | Get all active services. |
 
 ## Escrow
 
-The Escrow contract holds USDT during service execution, enforces timeouts, and handles disputes.
-
-### Data Structures
-
-```solidity
-enum OrderStatus { None, Pending, Completed, Refunded, Disputed }
-
-struct Order {
-    uint256 id;           // Auto-incrementing order ID
-    address client;       // Buyer's Agentic Wallet
-    address agent;        // Service provider's Agentic Wallet
-    uint256 amount;       // USDT amount locked (6 decimals)
-    uint256 serviceId;    // Registry service ID
-    uint256 deadline;     // Unix timestamp for auto-refund eligibility
-    OrderStatus status;   // Current order state
-}
-```
+The Escrow contract holds USDT during x402 payment flows and enforces timeouts.
 
 ### Configuration
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| `feeBps` | 200 | Platform fee in basis points (200 = 2%) |
-| `defaultTimeout` | 3600 | Default deadline offset in seconds (1 hour) |
+| `feeBps` | 200 | Platform fee (2%) |
+| `defaultTimeout` | 3600 | Auto-refund eligibility (1 hour) |
 
 ### Functions
 
 | Function | Access | Description |
 |----------|--------|-------------|
-| `deposit(uint256 serviceId, uint256 amount) → uint256` | Anyone | Lock USDT in escrow for a service. Amount must match service price. Returns order ID. Requires prior USDT `approve()`. |
-| `release(uint256 orderId)` | Client only | Release escrowed funds to agent (minus 2% fee to Treasury). |
-| `refund(uint256 orderId)` | Client only | Refund to client after deadline has passed. |
-| `dispute(uint256 orderId)` | Client or Agent | Freeze funds and mark order as disputed. |
-| `resolveDispute(uint256 orderId, bool toAgent)` | Owner only | Resolve dispute: if `toAgent`, agent gets paid; otherwise client gets refund. |
-| `getOrder(uint256 orderId) → Order` | View | Get order details by ID. |
-| `getOrdersByClient(address client) → Order[]` | View | Get all orders where the given address is the client. |
-| `getOrdersByAgent(address agent) → Order[]` | View | Get all orders where the given address is the agent. |
-
-### Events
-
-```solidity
-event OrderCreated(uint256 indexed id, address indexed client, address indexed agent, uint256 amount, uint256 serviceId);
-event OrderCompleted(uint256 indexed id, uint256 agentPayout, uint256 fee);
-event OrderRefunded(uint256 indexed id, uint256 amount);
-event OrderDisputed(uint256 indexed id);
-event DisputeResolved(uint256 indexed id, bool toAgent);
-```
-
-### Payment Flow
-
-```
-Client Wallet → approve(Escrow, amount) → Escrow.deposit()
-                                              │
-                                        [USDT locked]
-                                              │
-                              ┌────────────────┼────────────────┐
-                              │                │                │
-                         release()        refund()         dispute()
-                              │                │                │
-                    ┌─────────┴────┐      Client gets     resolveDispute()
-                    │              │      full refund      ┌─────┴─────┐
-               Agent gets    Treasury                   toAgent    toClient
-              98% payout    gets 2% fee                  (pay)     (refund)
-```
+| `deposit(uint256 serviceId, uint256 amount) -> uint256` | Anyone | Lock USDT in escrow. Returns order ID. |
+| `release(uint256 orderId)` | Client | Release funds to service provider (minus 2% fee). |
+| `refund(uint256 orderId)` | Client | Refund after deadline. |
+| `dispute(uint256 orderId)` | Either | Freeze funds. |
 
 ## Treasury
 
-The Treasury collects platform fees, manages reinvestment into Uniswap v3 LP, and distributes yield to agents.
-
-### State Variables
-
-| Variable | Type | Description |
-|----------|------|-------------|
-| `usdt` | `IERC20` | USDT token contract |
-| `escrow` | `address` | Escrow contract address |
-| `uniswapRouter` | `address` | Uniswap v3 SwapRouter on X Layer |
-| `totalCollected` | `uint256` | Total platform fees collected |
-| `totalReinvested` | `uint256` | Total USDT reinvested into LP |
-| `totalEarnings` | `uint256` | Sum of all agent earnings registered |
+Collects platform fees and manages reinvestment into Uniswap v3 LP.
 
 ### Functions
 
 | Function | Access | Description |
 |----------|--------|-------------|
-| `collectFee(uint256 amount)` | Escrow only | Receive platform fee from Escrow on order completion. |
-| `registerAgentEarnings(address agent, uint256 amount)` | Owner only | Track an agent's earnings for yield distribution. |
-| `reinvest(uint256 amount)` | Owner only | Reinvest collected fees into Uniswap LP. |
-| `claimYield(address agent)` | Anyone | Claim accumulated yield for a specific agent. |
-| `getAgentYield(address agent) → uint256` | View | Get unclaimed yield for an agent. |
-| `totalCollected() → uint256` | View | Total fees collected by Treasury. |
-| `totalReinvested() → uint256` | View | Total amount reinvested into LP. |
-
-### Yield Calculation
-
-```
-agentYield = (totalCollected * agentEarnings / totalEarnings) - agentClaimed
-```
-
-Yield is proportional to an agent's contribution to total platform earnings.
-
-### Events
-
-```solidity
-event FeeCollected(uint256 amount, uint256 totalCollected);
-event Reinvested(uint256 usdtAmount, uint256 okbReceived);
-event YieldClaimed(address indexed agent, uint256 amount);
-```
+| `collectFee(uint256 amount)` | Escrow | Receive fee on order completion. |
+| `reinvest(uint256 amount)` | Owner | Reinvest into Uniswap LP. |
+| `claimYield(address agent)` | Anyone | Claim accumulated yield. |
 
 ## Solidity Version & Dependencies
 
@@ -180,13 +116,4 @@ event YieldClaimed(address indexed agent, uint256 amount);
 | Solidity | `^0.8.24` |
 | OpenZeppelin Upgradeable | `5.x` |
 | Foundry | Latest |
-| Proxy Pattern | UUPS (EIP-1822) via `UUPSUpgradeable` |
-
-## Storage Layout Rules
-
-All contracts follow these rules to maintain upgrade safety:
-
-1. Never delete or reorder existing storage variables
-2. New variables are only appended at the end
-3. Each contract reserves 50 storage slots via `uint256[50] private __gap`
-4. Use `forge inspect <Contract> storage-layout` to verify before upgrades
+| Proxy Pattern | UUPS (EIP-1822) |

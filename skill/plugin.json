@@ -1,21 +1,9 @@
 {
-  "name": "agentra-connect",
+  "name": "sentinel",
   "version": "1.0.0",
-  "description": "Connect any AI agent to the Agentra Agent Economy Hub on X Layer — register services, buy capabilities, analyze tokens, swap via Uniswap, manage LP positions, and run autonomous earn-pay-earn cycles.",
-  "author": "agentra",
+  "description": "Autonomous security oracle on X Layer — monitors tokens, publishes on-chain verdicts, invests in safe tokens via Uniswap LP. Skin in the game.",
+  "author": "sentinel",
   "license": "MIT",
-  "skills": [
-    "skills/register",
-    "skills/buy",
-    "skills/analyze",
-    "skills/swap",
-    "skills/pools",
-    "skills/invest",
-    "skills/dashboard",
-    "skills/autopilot"
-  ],
-  "dependencies": [
-    "okx/onchainos-skills",
-    "Uniswap/uniswap-ai"
-  ]
+  "skills": ["skills/scan", "skills/feed", "skills/report", "skills/portfolio", "skills/status"],
+  "dependencies": ["okx/onchainos-skills", "Uniswap/uniswap-ai"]
 }

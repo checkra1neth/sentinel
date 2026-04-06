@@ -1,158 +1,74 @@
-# Service Router API Reference
+# Sentinel API Reference
 
-The Agentra Service Router is an Express.js API that bridges HTTP requests to on-chain contracts. It handles x402 payment challenges, escrow deposits, service execution routing, and payment release.
+The Sentinel server exposes a REST API and WebSocket endpoint for interacting with the security oracle. Paid endpoints use x402 micropayments over USDT on X Layer.
 
 ## Base URL
 
 | Environment | URL |
 |-------------|-----|
-| Production | `https://api.agentra.xyz` |
-| Testnet | `https://testnet-api.agentra.xyz` |
-| Local | `http://localhost:3002` |
+| Production | `https://api.sentinel.xyz` |
+| Local | `http://localhost:3000` |
 
 ## Authentication
 
-Most endpoints are public. Service execution endpoints require x402 payment (see `x402-flow.md`). No API keys are needed — payment is the authentication.
+No API keys needed. Paid endpoints use x402 payment proofs -- payment is the authentication.
 
 ## Endpoints
 
-### GET /api/services
+### GET /api/verdicts
 
-List all active services from the on-chain Registry.
+Public verdict feed. Returns the last 20 verdicts published by the Sentinel oracle.
 
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `type` | string | No | Filter by service type (e.g., `analyst`, `auditor`) |
-| `maxPrice` | string | No | Maximum price in USDT (e.g., `1.00`) |
-| `agent` | string | No | Filter by agent wallet address |
-| `page` | number | No | Page number for pagination (default: 1) |
-| `limit` | number | No | Results per page (default: 20, max: 100) |
+| `limit` | number | No | Number of verdicts to return (default: 20, max: 100) |
+| `verdict` | string | No | Filter by verdict level: `SAFE`, `CAUTION`, `DANGEROUS` |
 
 **Response: 200 OK**
 
 ```json
 {
-  "services": [
+  "verdicts": [
     {
-      "id": 5,
-      "agent": "0xBBBB...2222",
-      "serviceType": "analyst",
-      "endpoint": "https://api.agentra.xyz/services/0xBBBB/analyst",
-      "priceUsdt": "1000000",
-      "priceFormatted": "1.00",
-      "active": true
-    },
-    {
-      "id": 7,
-      "agent": "0x1234...abcd",
-      "serviceType": "code-review",
-      "endpoint": "https://api.agentra.xyz/services/0x1234/code-review",
-      "priceUsdt": "500000",
-      "priceFormatted": "0.50",
-      "active": true
+      "token": "0xABC...123",
+      "name": "ExampleToken",
+      "symbol": "EXT",
+      "riskScore": 72,
+      "verdict": "CAUTION",
+      "scannedAt": "2026-04-06T10:30:00Z",
+      "txHash": "0xVERDICT_TX"
     }
   ],
-  "total": 24,
-  "page": 1,
-  "limit": 20
+  "total": 20
 }
 ```
 
 **Example:**
 
 ```bash
-# List all active services
-curl https://api.agentra.xyz/api/services
-
-# Filter by type
-curl "https://api.agentra.xyz/api/services?type=analyst"
-
-# Filter by max price
-curl "https://api.agentra.xyz/api/services?type=auditor&maxPrice=5.00"
+curl https://api.sentinel.xyz/api/verdicts
+curl "https://api.sentinel.xyz/api/verdicts?verdict=DANGEROUS&limit=50"
 ```
 
 ---
 
-### GET /api/services/:agentAddress/stats
+### GET /api/verdicts/:token
 
-Get statistics for a specific agent.
+Detailed security report for a specific token. Requires x402 payment.
 
 **Path Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `agentAddress` | string | Agent's Agentic Wallet address (0x...) |
-
-**Response: 200 OK**
-
-```json
-{
-  "agent": "0xBBBB...2222",
-  "services": [
-    {
-      "id": 5,
-      "serviceType": "analyst",
-      "priceUsdt": "1000000",
-      "active": true,
-      "totalOrders": 41,
-      "completedOrders": 39,
-      "refundedOrders": 1,
-      "disputedOrders": 1,
-      "completionRate": 95.12
-    }
-  ],
-  "earnings": {
-    "totalEarned": "39200000",
-    "totalFees": "800000",
-    "grossRevenue": "40000000"
-  },
-  "lpYield": {
-    "reinvested": "20000000",
-    "unclaimedYield": "850000",
-    "lpSharePercent": 2.1
-  },
-  "joinedAt": "2026-04-01T10:00:00Z"
-}
-```
-
-**Example:**
-
-```bash
-curl https://api.agentra.xyz/api/services/0xBBBB2222/stats
-```
-
----
-
-### POST /api/services/:serviceId/:action
-
-Execute an agent's service. This endpoint implements the x402 payment flow.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `serviceId` | number | Service ID from the Registry |
-| `action` | string | Action to execute (e.g., `execute`, `analyze`, `review`) |
+| `token` | string | ERC-20 token address on X Layer (0x...) |
 
 **Headers:**
 
 | Header | Required | Description |
 |--------|----------|-------------|
-| `Content-Type` | Yes | `application/json` |
-| `X-Payment` | Conditional | Base64-encoded x402 payment proof (required on retry after 402) |
-
-**Request Body:**
-
-```json
-{
-  "input": {
-    "token": "0xDEF...5678",
-    "chain": "xlayer"
-  }
-}
-```
+| `X-Payment` | Yes | Base64-encoded x402 payment proof (0.50 USDT) |
 
 **Response: 402 Payment Required** (first request without `X-Payment`)
 
@@ -162,134 +78,125 @@ Execute an agent's service. This endpoint implements the x402 payment flow.
     "version": "1.0",
     "network": "xlayer",
     "chainId": 196,
-    "service": {
-      "id": 5,
-      "type": "analyst",
-      "agent": "0xBBBB...2222",
-      "price": "1000000",
-      "currency": "USDT",
-      "decimals": 6
-    },
-    "escrow": {
-      "address": "0xESCROW_ADDRESS",
-      "function": "deposit(uint256,uint256)",
-      "approveToken": "0xUSDT_ADDRESS",
-      "approveAmount": "1000000"
-    },
-    "payment": {
-      "nonce": "0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-      "expiry": 1743696000,
-      "recipient": "0xESCROW_ADDRESS"
-    },
-    "description": "Token analysis service by agent 0xBBBB...2222"
+    "price": "500000",
+    "currency": "USDT",
+    "decimals": 6,
+    "escrow": "0xa80066f2fd7efdFB944ECcb16f67604D33C34333",
+    "description": "Detailed security report for token"
   }
 }
 ```
 
-**Response: 200 OK** (retry with valid `X-Payment`)
+**Response: 200 OK** (with valid `X-Payment`)
 
 ```json
 {
-  "orderId": 42,
-  "serviceId": 5,
-  "status": "completed",
-  "result": {
-    "token": "0xDEF...5678",
-    "name": "ExampleToken",
-    "symbol": "EXT",
-    "securityScore": 85,
-    "liquidity": "2400000.00",
-    "holders": 1247,
-    "riskLevel": "low",
-    "recommendations": [
-      "Contract verified, no reentrancy issues",
-      "Adequate liquidity for position sizes < $50k",
-      "Owner can mint — monitor governance proposals"
+  "token": "0xABC...123",
+  "name": "ExampleToken",
+  "symbol": "EXT",
+  "riskScore": 72,
+  "verdict": "CAUTION",
+  "security": {
+    "honeypot": false,
+    "mintable": true,
+    "pausable": false,
+    "proxy": false,
+    "transferTax": 3.0,
+    "issues": [
+      {"severity": "high", "issue": "Owner can mint unlimited tokens"},
+      {"severity": "medium", "issue": "Transfer tax detected (3%)"}
     ]
   },
-  "payment": {
-    "amount": "1000000",
-    "agentPayout": "980000",
-    "platformFee": "20000",
-    "txHash": "0xRELEASE_TX_HASH"
+  "liquidity": {
+    "uniswapV3Pool": "0xPOOL...789",
+    "tvl": "245000.00",
+    "volume24h": "18700.00",
+    "feeTier": 3000,
+    "priceUsd": "0.0234"
+  },
+  "holders": {
+    "total": 1247,
+    "top10Percent": 68.4,
+    "top1": {"address": "0xTOP...001", "percent": 22.1}
+  },
+  "devInfo": {
+    "deployer": "0xDEV...456",
+    "deployedAt": "2026-03-15T08:00:00Z",
+    "verified": true,
+    "previousContracts": 3
+  },
+  "onChainVerdict": {
+    "txHash": "0xVERDICT_TX_HASH",
+    "blockNumber": 12345678,
+    "timestamp": "2026-04-06T10:30:00Z"
   }
 }
 ```
-
-**Error Responses:**
-
-| Status | Body | Cause |
-|--------|------|-------|
-| 400 | `{"error": "Invalid input"}` | Missing or malformed request body |
-| 402 | x402 challenge (see above) | No payment or invalid payment proof |
-| 404 | `{"error": "Service not found"}` | Invalid service ID or service deactivated |
-| 408 | `{"error": "Service timeout"}` | Agent didn't respond within deadline |
-| 500 | `{"error": "Internal server error"}` | Service Router or agent failure |
 
 **Example:**
 
 ```bash
-# Step 1: Initial request (gets 402)
-curl -X POST https://api.agentra.xyz/api/services/5/execute \
-  -H "Content-Type: application/json" \
-  -d '{"input": {"token": "0xDEF5678", "chain": "xlayer"}}'
+# Step 1: Get x402 challenge
+curl https://api.sentinel.xyz/api/verdicts/0xABC123
 
-# Step 2: Retry with signed payment proof
-curl -X POST https://api.agentra.xyz/api/services/5/execute \
-  -H "Content-Type: application/json" \
-  -H "X-Payment: BASE64_SIGNED_PROOF" \
-  -d '{"input": {"token": "0xDEF5678", "chain": "xlayer"}}'
+# Step 2: Retry with payment proof
+curl https://api.sentinel.xyz/api/verdicts/0xABC123 \
+  -H "X-Payment: BASE64_SIGNED_PROOF"
 ```
 
 ---
 
-### GET /api/health
+### POST /api/scan/:token
 
-Check platform health status.
+Trigger a manual security scan for a token. Requires x402 payment.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | string | ERC-20 token address on X Layer (0x...) |
+
+**Headers:**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Payment` | Yes | Base64-encoded x402 payment proof (0.10 USDT) |
 
 **Response: 200 OK**
 
 ```json
 {
-  "status": "healthy",
-  "version": "0.1.0",
-  "network": {
-    "name": "xlayer",
-    "chainId": 196,
-    "rpcConnected": true,
-    "blockNumber": 12345678
+  "token": "0xABC...123",
+  "name": "ExampleToken",
+  "symbol": "EXT",
+  "riskScore": 72,
+  "verdict": "CAUTION",
+  "risks": [
+    {"severity": "high", "issue": "Owner can mint unlimited tokens"},
+    {"severity": "medium", "issue": "Transfer tax detected (3%)"}
+  ],
+  "honeypot": false,
+  "devInfo": {
+    "deployer": "0xDEV...456",
+    "deployedAt": "2026-03-15T08:00:00Z",
+    "verified": true
   },
-  "contracts": {
-    "registry": {
-      "address": "0xREGISTRY_ADDRESS",
-      "serviceCount": 24,
-      "reachable": true
-    },
-    "escrow": {
-      "address": "0xESCROW_ADDRESS",
-      "pendingOrders": 3,
-      "reachable": true
-    },
-    "treasury": {
-      "address": "0xTREASURY_ADDRESS",
-      "totalCollected": "5200000",
-      "reachable": true
-    }
-  },
-  "uptime": 864000,
-  "timestamp": "2026-04-03T12:00:00Z"
+  "txHash": "0xVERDICT_TX_HASH"
 }
 ```
 
 **Example:**
 
 ```bash
-curl https://api.agentra.xyz/api/health
+curl -X POST https://api.sentinel.xyz/api/scan/0xABC123 \
+  -H "X-Payment: BASE64_SIGNED_PROOF"
 ```
+
+---
 
 ### GET /api/agents
 
-List all registered agents with their wallets, balances, and service info.
+Agent overview with wallet addresses, roles, and current status.
 
 **Response: 200 OK**
 
@@ -297,123 +204,107 @@ List all registered agents with their wallets, balances, and service info.
 {
   "agents": [
     {
-      "id": "1",
+      "name": "scanner",
+      "role": "Token discovery and monitoring",
+      "wallet": "0x38c7b7651b42cd5d0e9fe1909f52b6fd8e044db2",
+      "status": "active",
+      "lastAction": "2026-04-06T10:30:00Z"
+    },
+    {
       "name": "analyst",
-      "walletAddress": "0xAAAA...1111",
-      "usdtBalance": "25400000",
-      "reinvestConfig": {
-        "threshold": 5000000,
-        "percent": 50,
-        "minBalance": 2000000
-      },
-      "services": [
-        {"id": 1, "type": "analyst", "price": 1000000}
-      ]
-    }
-  ]
-}
-```
-
-**Example:**
-
-```bash
-curl http://localhost:3002/api/agents
-```
-
----
-
-### GET /api/economy/stats
-
-Get platform-wide economy statistics aggregated from the event bus.
-
-**Response: 200 OK**
-
-```json
-{
-  "totalOrders": 156,
-  "totalVolume": "342500000",
-  "activeAgents": 12,
-  "activeServices": 24,
-  "totalFees": "6850000"
-}
-```
-
-**Example:**
-
-```bash
-curl http://localhost:3002/api/economy/stats
-```
-
----
-
-### GET /api/events/history
-
-Get the event history feed for the entire platform.
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `limit` | number | No | Maximum events to return (default: 100) |
-
-**Response: 200 OK**
-
-```json
-{
-  "events": [
+      "role": "Deep security analysis and verdict publishing",
+      "wallet": "0x874370bc9352bfa4b39c22fa82b89f4ca952ce03",
+      "status": "active",
+      "lastAction": "2026-04-06T10:30:00Z"
+    },
     {
-      "type": "order.completed",
-      "agent": "analyst",
-      "data": {"orderId": 42, "amount": "1000000"},
-      "timestamp": "2026-04-03T12:30:00Z"
+      "name": "executor",
+      "role": "LP investment in safe tokens",
+      "wallet": "0x7500350249e155fdacb27dc0a12f5198b158ee00",
+      "status": "active",
+      "lastAction": "2026-04-06T09:00:00Z"
     }
   ]
 }
 ```
 
-**Example:**
-
-```bash
-curl "http://localhost:3002/api/events/history?limit=50"
-```
-
 ---
 
-### GET /api/agents/:address/events
+### GET /api/portfolio
 
-Get event history filtered by a specific agent address or name.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `address` | string | Agent wallet address or name |
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `limit` | number | No | Maximum events to return (default: 50) |
+Executor LP positions on Uniswap v3. Shows all active positions with PnL.
 
 **Response: 200 OK**
 
 ```json
 {
-  "events": [
+  "executor": "0x7500350249e155fdacb27dc0a12f5198b158ee00",
+  "totalInvested": "1250.00",
+  "totalCurrentValue": "1387.50",
+  "totalPnl": "+137.50",
+  "positions": [
     {
-      "type": "service.executed",
-      "agent": "analyst",
-      "data": {"action": "execute", "serviceId": 1},
-      "timestamp": "2026-04-03T12:28:00Z"
+      "tokenId": 1234,
+      "pair": "OKB/USDT",
+      "feeTier": 3000,
+      "invested": "500.00",
+      "currentValue": "562.30",
+      "feesEarned": "12.40",
+      "pnl": "+62.30",
+      "verdict": "SAFE",
+      "riskScore": 8
     }
   ]
 }
 ```
 
+---
+
+### GET /api/stats
+
+Aggregate oracle statistics.
+
+**Response: 200 OK**
+
+```json
+{
+  "tokensScanned": 847,
+  "verdicts": {"safe": 312, "caution": 389, "dangerous": 146},
+  "threatsDetected": 535,
+  "honeypotsCaught": 89,
+  "lpInvested": "4250.00",
+  "lpCurrentValue": "4782.50",
+  "revenueEarned": "892.30",
+  "accuracy": {"overall": 94.2, "safeCorrect": 96.1, "dangerousCorrect": 98.6},
+  "uptime": "99.7%"
+}
+```
+
+---
+
+### WS /api/events
+
+WebSocket endpoint for real-time event streaming.
+
+**Events:**
+
+| Event | Description |
+|-------|-------------|
+| `verdict.published` | New verdict published to VerdictRegistry |
+| `scan.started` | Manual scan initiated |
+| `scan.completed` | Scan finished with results |
+| `position.opened` | Executor opened new LP position |
+| `position.closed` | Executor closed LP position |
+| `threat.detected` | Dangerous token identified |
+
 **Example:**
 
-```bash
-curl "http://localhost:3002/api/agents/0xAAAA1111/events?limit=20"
+```javascript
+const ws = new WebSocket("wss://api.sentinel.xyz/api/events");
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data.type, data.payload);
+};
 ```
 
 ---
@@ -422,52 +313,28 @@ curl "http://localhost:3002/api/agents/0xAAAA1111/events?limit=20"
 
 | Endpoint | Limit |
 |----------|-------|
-| `GET /api/services` | 100 requests/minute |
-| `GET /api/services/:addr/stats` | 60 requests/minute |
-| `POST /api/services/:id/:action` | 30 requests/minute per client |
-| `GET /api/health` | 120 requests/minute |
+| `GET /api/verdicts` | 100 requests/minute |
+| `GET /api/verdicts/:token` | 30 requests/minute |
+| `POST /api/scan/:token` | 10 requests/minute |
+| `GET /api/agents` | 60 requests/minute |
+| `GET /api/portfolio` | 60 requests/minute |
+| `GET /api/stats` | 60 requests/minute |
 
-Rate limits are per IP address. Exceeding the limit returns `429 Too Many Requests`.
-
-## WebSocket Events (Future)
-
-A WebSocket endpoint is planned for real-time notifications:
-
-```
-ws://api.agentra.xyz/ws
-```
-
-Planned events:
-- `order.created` — New order deposited to Escrow
-- `order.completed` — Order released, payment sent
-- `order.refunded` — Order refunded to client
-- `order.disputed` — Order disputed by a party
-- `service.registered` — New service added to Registry
-- `service.deactivated` — Service removed from marketplace
+Rate limits are per IP address. Exceeding returns `429 Too Many Requests`.
 
 ## Error Format
-
-All error responses follow a consistent format:
 
 ```json
 {
   "error": "Human-readable error message",
-  "code": "MACHINE_READABLE_CODE",
-  "details": {}
+  "code": "MACHINE_READABLE_CODE"
 }
 ```
 
-Common error codes:
-
 | Code | Description |
 |------|-------------|
-| `INVALID_INPUT` | Request body validation failed |
-| `SERVICE_NOT_FOUND` | Service ID doesn't exist or is deactivated |
-| `PAYMENT_REQUIRED` | x402 challenge — client must sign and retry |
-| `PAYMENT_INVALID` | x402 proof signature verification failed |
-| `PAYMENT_EXPIRED` | x402 proof nonce has expired |
-| `PAYMENT_REPLAY` | x402 nonce has already been used |
-| `INSUFFICIENT_BALANCE` | Client wallet doesn't have enough USDT |
-| `SERVICE_TIMEOUT` | Agent didn't respond before deadline |
-| `ESCROW_FAILED` | On-chain escrow transaction failed |
+| `PAYMENT_REQUIRED` | x402 challenge -- client must sign and retry |
+| `PAYMENT_INVALID` | x402 proof verification failed |
+| `TOKEN_NOT_FOUND` | Token address not recognized or not on X Layer |
+| `SCAN_IN_PROGRESS` | Token is currently being scanned |
 | `RATE_LIMITED` | Too many requests |
