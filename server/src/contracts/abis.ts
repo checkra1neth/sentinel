@@ -133,6 +133,55 @@ export const treasuryAbi = [
   },
 ] as const;
 
+export const verdictRegistryAbi = [
+  {
+    name: "publishVerdict",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "riskScore", type: "uint8" },
+      { name: "verdict", type: "string" },
+      { name: "isHoneypot", type: "bool" },
+      { name: "hasRug", type: "bool" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "verdictCount",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "sentinel",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    name: "updateSentinel",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "_sentinel", type: "address" }],
+    outputs: [],
+  },
+  {
+    name: "VerdictPublished",
+    type: "event",
+    inputs: [
+      { name: "token", type: "address", indexed: true },
+      { name: "riskScore", type: "uint8", indexed: false },
+      { name: "verdict", type: "string", indexed: false },
+      { name: "isHoneypot", type: "bool", indexed: false },
+      { name: "hasRug", type: "bool", indexed: false },
+      { name: "timestamp", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
 export const erc20Abi = [
   {
     name: "approve",

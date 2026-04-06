@@ -183,3 +183,38 @@ export interface X402Proof {
   nonce: number;
   expiry: number;
 }
+
+// ---------------------------------------------------------------------------
+// Sentinel verdicts
+// ---------------------------------------------------------------------------
+
+export interface Verdict {
+  token: string;
+  tokenName: string;
+  tokenSymbol: string;
+  riskScore: number;
+  verdict: "SAFE" | "CAUTION" | "DANGEROUS";
+  isHoneypot: boolean;
+  hasRug: boolean;
+  hasMint: boolean;
+  isProxy: boolean;
+  buyTax: number;
+  sellTax: number;
+  holderConcentration: number;
+  risks: string[];
+  priceUsd: number;
+  marketCap: number;
+  liquidityUsd: number;
+  timestamp: number;
+  txHash?: string;
+  lpInvested?: string;
+}
+
+export interface VerdictStats {
+  totalScanned: number;
+  totalSafe: number;
+  totalCaution: number;
+  totalDangerous: number;
+  totalLpInvested: number;
+  lpPnl: number;
+}
