@@ -9,6 +9,7 @@ import { SplitText } from "gsap/SplitText";
 import Lenis from "lenis";
 import { AuroraBg } from "../components/aurora-bg";
 import { CursorGlow } from "../components/cursor-glow";
+import { TiltFrame } from "../components/tilt-frame";
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
@@ -97,13 +98,19 @@ export default function LandingPage(): React.ReactNode {
             </a>
           </div>
 
-          {/* Product preview */}
-          <div ref={previewRef} className="relative rounded-xl border border-[#27272a]/60 overflow-hidden shadow-2xl shadow-black/40" style={{ opacity: 0 }}>
-            <div className="bg-[#18181b] px-4 py-2.5 flex items-center gap-2 border-b border-[#27272a]/60">
-              <div className="flex gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3f3f46]" /><div className="w-2.5 h-2.5 rounded-full bg-[#3f3f46]" /><div className="w-2.5 h-2.5 rounded-full bg-[#3f3f46]" /></div>
-              <span className="text-[10px] font-mono text-[#71717a] ml-2">sentinel.app/feed</span>
-            </div>
-            <iframe src="/feed" className="w-full h-[420px] lg:h-[520px] pointer-events-none" title="Sentinel Threat Feed Preview" loading="lazy" />
+          {/* Product preview — 3D tilt frame with rotating gradient border */}
+          <div ref={previewRef} style={{ opacity: 0 }}>
+            <TiltFrame>
+              <div className="bg-[#18181b] px-4 py-2.5 flex items-center gap-2 border-b border-[#27272a]/60">
+                <div className="flex gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#ef4444]/60" /><div className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]/60" /><div className="w-2.5 h-2.5 rounded-full bg-[#34d399]/60" /></div>
+                <span className="text-[10px] font-mono text-[#71717a] ml-2">sentinel.app/feed</span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#34d399] animate-pulse" />
+                  <span className="text-[9px] text-[#71717a]">Live</span>
+                </div>
+              </div>
+              <iframe src="/feed" className="w-full h-[420px] lg:h-[520px] pointer-events-none" title="Sentinel Threat Feed Preview" loading="lazy" />
+            </TiltFrame>
           </div>
         </div>
       </section>
