@@ -91,7 +91,7 @@ export class AnalystAgent extends BaseAgent {
     this.log(`Deep scan: ${tokenAddress}`);
 
     // 1. Price info
-    const priceResult = onchainosToken.priceInfo(tokenAddress);
+    const priceResult = onchainosToken.priceInfo(tokenAddress, config.chainId);
     const priceData = (priceResult.success ? priceResult.data : null) as Record<string, unknown> | null;
 
     // 2. Security scan via OnchainOS
@@ -110,12 +110,13 @@ export class AnalystAgent extends BaseAgent {
       }
     }
 
-    // 4. Dev info (rug history)
-    const devResult = onchainosTrenches.devInfo(tokenAddress);
+    // 4. Dev info (rug history + memepump tags)
+    const devResult = onchainosTrenches.devInfo(tokenAddress, config.chainId);
     const devData = (devResult.success ? devResult.data : null) as Record<string, unknown> | null;
+    const devTags = (devData?.tags ?? null) as Record<string, unknown> | null;
 
     // 5. Advanced info (holder concentration)
-    const advResult = onchainosToken.advancedInfo(tokenAddress);
+    const advResult = onchainosToken.advancedInfo(tokenAddress, config.chainId);
     const advData = (advResult.success ? advResult.data : null) as Record<string, unknown> | null;
 
     // 6. Bytecode probe via viem readContract
@@ -173,20 +174,18 @@ export class AnalystAgent extends BaseAgent {
       ]);
 
     // 7. Liquidity check
-    const liqResult = onchainosToken.liquidity(tokenAddress);
-    const liqData = (liqResult.success ? liqResult.data : null) as Record<string, unknown> | null;
-    let liquidityUsd = Number(
-      liqData && typeof liqData === "object"
-        ? (liqData as Record<string, unknown>).tvlUsd ??
-            (liqData as Record<string, unknown>).liquidityUsd ??
-            0
-        : Array.isArray(liqData)
-          ? (liqData as Array<Record<string, unknown>>).reduce(
-              (sum, p) => sum + Number(p.tvlUsd ?? 0),
-              0,
-            )
-          : 0,
-    );
+    const liqResult = onchainosToken.liquidity(tokenAddress, config.chainId);
+    const liqRaw = liqResult.success ? liqResult.data : null;
+    let liquidityUsd = 0;
+    if (Array.isArray(liqRaw)) {
+      liquidityUsd = (liqRaw as Array<Record<string, unknown>>).reduce(
+        (sum, p) => sum + Number(p.liquidityUsd ?? p.tvlUsd ?? 0),
+        0,
+      );
+    } else if (liqRaw && typeof liqRaw === "object") {
+      const obj = liqRaw as Record<string, unknown>;
+      liquidityUsd = Number(obj.liquidityUsd ?? obj.tvlUsd ?? 0);
+    }
 
     // Uniswap v3 pool check
     let hasUniPool = false;
@@ -212,12 +211,20 @@ export class AnalystAgent extends BaseAgent {
     const risks: string[] = [];
     let riskScore = 0;
 
+    // OKX security scan returns: isRiskToken, buyTaxes, sellTaxes
+    // Also check legacy fields for OKX fallback API
+    const isRiskToken =
+      securityScan?.isRiskToken === true;
     const isHoneypot =
       securityScan?.isHoneypot === true ||
       securityScan?.isHoneypot === "1";
     if (isHoneypot) {
       risks.push("honeypot");
       riskScore += 50;
+    }
+    if (isRiskToken && !isHoneypot) {
+      risks.push("risk_token");
+      riskScore += 30;
     }
 
     const hasRug =
@@ -231,8 +238,9 @@ export class AnalystAgent extends BaseAgent {
 
     const hasMint =
       securityScan?.isMintable === true ||
-      securityScan?.isMintable === "1";
-    if (hasMint) {
+      securityScan?.isMintable === "1" ||
+      owner !== null; // has owner = can potentially mint
+    if (securityScan?.isMintable === true || securityScan?.isMintable === "1") {
       risks.push("mint");
       riskScore += 20;
     }
@@ -246,21 +254,64 @@ export class AnalystAgent extends BaseAgent {
       riskScore += 15;
     }
 
-    const buyTax = Number(securityScan?.buyTax ?? 0);
-    const sellTax = Number(securityScan?.sellTax ?? 0);
+    // OKX CLI returns buyTaxes/sellTaxes (with "es"), fallback to buyTax/sellTax
+    const buyTax = Number(securityScan?.buyTaxes ?? securityScan?.buyTax ?? 0);
+    const sellTax = Number(securityScan?.sellTaxes ?? securityScan?.sellTax ?? 0);
     if (buyTax > 5 || sellTax > 5) {
       risks.push("high_tax");
       riskScore += 15;
     }
 
+    // Owner concentration — any contract with an owner() is centralized
+    if (owner !== null) {
+      risks.push("has_owner");
+      riskScore += 5;
+    }
+
     const holderConcentration = Number(
       advData?.topHolderPercent ??
         advData?.holderConcentration ??
-        0,
+        (devTags?.top10HoldingsPercent ? Number(devTags.top10HoldingsPercent) * 100 : 0),
     );
     if (holderConcentration > 70) {
       risks.push("concentrated_holders");
       riskScore += 10;
+    }
+
+    // Very low liquidity is a risk
+    if (liquidityUsd > 0 && liquidityUsd < 10000) {
+      risks.push("low_liquidity");
+      riskScore += 10;
+    }
+
+    // Memepump intelligence — devTags from OKX
+    if (devTags) {
+      const insidersPercent = Number(devTags.insidersPercent ?? 0);
+      const snipersPercent = Number(devTags.snipersPercent ?? 0);
+      const devHoldingsPercent = Number(devTags.devHoldingsPercent ?? 0);
+      const top10HoldingsPercent = Number(devTags.top10HoldingsPercent ?? 0);
+      const bundlersPercent = Number(devTags.bundlersPercent ?? 0);
+
+      if (insidersPercent > 0.1) {
+        risks.push("insiders_" + (insidersPercent * 100).toFixed(0) + "%");
+        riskScore += 15;
+      }
+      if (snipersPercent > 0.05) {
+        risks.push("snipers_" + (snipersPercent * 100).toFixed(0) + "%");
+        riskScore += 10;
+      }
+      if (devHoldingsPercent > 0.1) {
+        risks.push("dev_holdings_" + (devHoldingsPercent * 100).toFixed(0) + "%");
+        riskScore += 15;
+      }
+      if (top10HoldingsPercent > 0.5) {
+        risks.push("top10_holds_" + (top10HoldingsPercent * 100).toFixed(0) + "%");
+        riskScore += 10;
+      }
+      if (bundlersPercent > 0.05) {
+        risks.push("bundlers_" + (bundlersPercent * 100).toFixed(0) + "%");
+        riskScore += 10;
+      }
     }
 
     riskScore = Math.min(riskScore, 100);

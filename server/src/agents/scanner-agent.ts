@@ -127,7 +127,7 @@ export class ScannerAgent extends BaseAgent {
     }
 
     // 3. Smart money signals
-    const signalResult = onchainosSignal.activities("smart_money");
+    const signalResult = onchainosSignal.activities("smart_money", config.chainId);
     if (signalResult.success && signalResult.data) {
       const items = Array.isArray(signalResult.data)
         ? signalResult.data

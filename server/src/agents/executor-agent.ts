@@ -87,7 +87,7 @@ export class ExecutorAgent extends BaseAgent {
     this.log(`Investing ${investAmount} USDT into ${token}`);
 
     // 1. Check liquidity
-    const liqResult = onchainosToken.liquidity(token);
+    const liqResult = onchainosToken.liquidity(token, config.chainId);
     const hasLiquidity = liqResult.success && liqResult.data;
 
     // 2. Check for Uniswap pool
@@ -110,7 +110,7 @@ export class ExecutorAgent extends BaseAgent {
     // 3. Try DeFi LP investment if pool exists
     if (uniPoolAddress || hasLiquidity) {
       try {
-        const searchResult = onchainosDefi.search(token);
+        const searchResult = onchainosDefi.search(token, config.chainId);
         if (searchResult.success && searchResult.data) {
           const opportunities = Array.isArray(searchResult.data)
             ? searchResult.data
@@ -183,6 +183,7 @@ export class ExecutorAgent extends BaseAgent {
         config.contracts.usdt,
         token,
         investAmount,
+        config.chainId,
       );
 
       if (swapResult.success) {

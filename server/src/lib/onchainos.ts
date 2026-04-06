@@ -7,7 +7,7 @@ import type { OnchainosResult } from "../types.js";
  */
 export function onchainos<T>(command: string): OnchainosResult<T> {
   try {
-    const raw = execSync(`onchainos ${command} --json 2>/dev/null`, {
+    const raw = execSync(`onchainos ${command} 2>/dev/null`, {
       timeout: 30_000,
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
@@ -30,8 +30,19 @@ export function onchainos<T>(command: string): OnchainosResult<T> {
     }
 
     const jsonStr = lines.slice(jsonStart).join("\n");
-    const data = JSON.parse(jsonStr) as T;
-    return { success: true, data };
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+
+    // CLI wraps responses in { ok: true, data: ... } — unwrap it
+    if (parsed && typeof parsed === "object" && "ok" in parsed && "data" in parsed) {
+      const inner = parsed.data;
+      // If data is an array with one element, return that element directly
+      if (Array.isArray(inner) && inner.length === 1) {
+        return { success: parsed.ok === true, data: inner[0] as T };
+      }
+      return { success: parsed.ok === true, data: inner as T };
+    }
+
+    return { success: true, data: parsed as T };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, data: undefined as T, error: message };
@@ -77,8 +88,8 @@ export const onchainosPayment = {
 // ---------------------------------------------------------------------------
 
 export const onchainosSecurity = {
-  tokenScan: (token: string, chainId?: number): OnchainosResult<unknown> =>
-    onchainos(`security token-scan --token ${token}${chainId ? ` --chain-id ${chainId}` : ""}`),
+  tokenScan: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`security token-scan --tokens "${chainId}:${token}"`),
 
   txScan: (txHash: string): OnchainosResult<unknown> =>
     onchainos(`security tx-scan --tx ${txHash}`),
@@ -89,11 +100,11 @@ export const onchainosSecurity = {
 // ---------------------------------------------------------------------------
 
 export const onchainosSwap = {
-  quote: (from: string, to: string, amount: string, chainId?: number): OnchainosResult<unknown> =>
-    onchainos(`swap quote --from ${from} --to ${to} --amount ${amount}${chainId ? ` --chain-id ${chainId}` : ""}`),
+  quote: (from: string, to: string, amount: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`swap quote --from ${from} --to ${to} --amount ${amount} --chain ${chainId}`),
 
-  execute: (from: string, to: string, amount: string, slippage?: string): OnchainosResult<unknown> =>
-    onchainos(`swap execute --from ${from} --to ${to} --amount ${amount}${slippage ? ` --slippage ${slippage}` : ""}`),
+  execute: (from: string, to: string, amount: string, chainId: number = 196, slippage?: string): OnchainosResult<unknown> =>
+    onchainos(`swap execute --from ${from} --to ${to} --amount ${amount} --chain ${chainId}${slippage ? ` --slippage ${slippage}` : ""}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -101,20 +112,20 @@ export const onchainosSwap = {
 // ---------------------------------------------------------------------------
 
 export const onchainosToken = {
-  search: (query: string): OnchainosResult<unknown> =>
-    onchainos(`token search --query "${query}"`),
+  search: (query: string, chains: string = "xlayer"): OnchainosResult<unknown> =>
+    onchainos(`token search --query "${query}" --chains ${chains}`),
 
-  priceInfo: (token: string): OnchainosResult<unknown> =>
-    onchainos(`token price-info --token ${token}`),
+  priceInfo: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`token price-info --address ${token} --chain ${chainId}`),
 
-  liquidity: (token: string): OnchainosResult<unknown> =>
-    onchainos(`token liquidity --token ${token}`),
+  liquidity: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`token liquidity --address ${token} --chain ${chainId}`),
 
-  hotTokens: (chainId?: number): OnchainosResult<unknown> =>
-    onchainos(`token hot-tokens${chainId ? ` --chain-id ${chainId}` : ""}`),
+  hotTokens: (chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`token hot-tokens --chain ${chainId}`),
 
-  advancedInfo: (token: string): OnchainosResult<unknown> =>
-    onchainos(`token advanced-info --token ${token}`),
+  advancedInfo: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`token advanced-info --address ${token} --chain ${chainId}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -122,11 +133,11 @@ export const onchainosToken = {
 // ---------------------------------------------------------------------------
 
 export const onchainosSignal = {
-  activities: (address?: string): OnchainosResult<unknown> =>
-    onchainos(`signal activities${address ? ` --address ${address}` : ""}`),
+  activities: (trackerType: string = "smart_money", chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`tracker activities --tracker-type ${trackerType} --chain ${chainId}`),
 
-  list: (filter?: string): OnchainosResult<unknown> =>
-    onchainos(`signal list${filter ? ` --filter ${filter}` : ""}`),
+  list: (chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`signal list --chain ${chainId}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -134,14 +145,14 @@ export const onchainosSignal = {
 // ---------------------------------------------------------------------------
 
 export const onchainosMarket = {
-  price: (token: string): OnchainosResult<unknown> =>
-    onchainos(`market price --token ${token}`),
+  price: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`market price --address ${token} --chain ${chainId}`),
 
-  kline: (token: string, interval?: string): OnchainosResult<unknown> =>
-    onchainos(`market kline --token ${token}${interval ? ` --interval ${interval}` : ""}`),
+  prices: (tokens: string[], chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`market prices --tokens ${tokens.join(",")} --chain ${chainId}`),
 
-  portfolioOverview: (): OnchainosResult<unknown> =>
-    onchainos("market portfolio-overview"),
+  kline: (token: string, chainId: number = 196, interval?: string): OnchainosResult<unknown> =>
+    onchainos(`market kline --address ${token} --chain ${chainId}${interval ? ` --interval ${interval}` : ""}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -149,8 +160,8 @@ export const onchainosMarket = {
 // ---------------------------------------------------------------------------
 
 export const onchainosDefi = {
-  search: (query: string): OnchainosResult<unknown> =>
-    onchainos(`defi search --query "${query}"`),
+  search: (query: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`defi search --query "${query}" --chain ${chainId}`),
 
   detail: (protocol: string): OnchainosResult<unknown> =>
     onchainos(`defi detail --protocol ${protocol}`),
@@ -161,8 +172,8 @@ export const onchainosDefi = {
   withdraw: (protocol: string, amount: string): OnchainosResult<unknown> =>
     onchainos(`defi withdraw --protocol ${protocol} --amount ${amount}`),
 
-  positions: (): OnchainosResult<unknown> =>
-    onchainos("defi positions"),
+  positions: (address: string, chains: string = "xlayer"): OnchainosResult<unknown> =>
+    onchainos(`defi positions --address ${address} --chains ${chains}`),
 
   collect: (protocol: string): OnchainosResult<unknown> =>
     onchainos(`defi collect --protocol ${protocol}`),
@@ -173,11 +184,11 @@ export const onchainosDefi = {
 // ---------------------------------------------------------------------------
 
 export const onchainosPortfolio = {
-  totalValue: (): OnchainosResult<unknown> =>
-    onchainos("portfolio total-value"),
+  totalValue: (address: string, chains: string = "xlayer"): OnchainosResult<unknown> =>
+    onchainos(`portfolio total-value --address ${address} --chains ${chains}`),
 
-  allBalances: (): OnchainosResult<unknown> =>
-    onchainos("portfolio all-balances"),
+  allBalances: (address: string, chains: string = "xlayer"): OnchainosResult<unknown> =>
+    onchainos(`portfolio all-balances --address ${address} --chains ${chains}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -185,9 +196,12 @@ export const onchainosPortfolio = {
 // ---------------------------------------------------------------------------
 
 export const onchainosTrenches = {
-  tokens: (filter?: string): OnchainosResult<unknown> =>
-    onchainos(`trenches tokens${filter ? ` --filter ${filter}` : ""}`),
+  tokens: (stage: string = "NEW", chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`memepump tokens --chain ${chainId} --stage ${stage}`),
 
-  devInfo: (token: string): OnchainosResult<unknown> =>
-    onchainos(`trenches dev-info --token ${token}`),
+  devInfo: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`memepump token-details --address ${token} --chain ${chainId}`),
+
+  tokenBundleInfo: (token: string): OnchainosResult<unknown> =>
+    onchainos(`memepump token-bundle-info --address ${token}`),
 };
