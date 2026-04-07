@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Coins, TrendingUp, Layers, ExternalLink } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
@@ -10,7 +9,6 @@ interface LpPosition {
   tokenSymbol: string;
   poolName: string;
   platformName: string;
-  investmentId: number;
   amountInvested: string;
   apr: string;
   tvl: string;
@@ -26,145 +24,93 @@ interface Portfolio {
   executorAddress: string;
 }
 
-function formatUsd(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
-  return `$${value.toFixed(2)}`;
+function fmt(v: number): string {
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  return `$${v.toFixed(2)}`;
 }
 
-function getTimeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+function ago(ts: number): string {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
 }
+
+function truncAddr(a: string): string { return `${a.slice(0, 6)}...${a.slice(-4)}`; }
 
 export default function PortfolioPage(): React.ReactNode {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
 
-  const fetchPortfolio = useCallback(async (): Promise<void> => {
+  const fetchData = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch(`${API_URL}/api/portfolio`);
-      if (res.ok) {
-        setPortfolio(await res.json() as Portfolio);
-      }
-    } catch {
-      // server unavailable
-    }
+      if (res.ok) setPortfolio(await res.json() as Portfolio);
+    } catch { /* */ }
   }, []);
 
   useEffect(() => {
-    fetchPortfolio();
-    const interval = setInterval(fetchPortfolio, 15_000);
-    return (): void => clearInterval(interval);
-  }, [fetchPortfolio]);
+    fetchData();
+    const iv = setInterval(fetchData, 15_000);
+    return () => clearInterval(iv);
+  }, [fetchData]);
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
-      <div className="mb-8">
-        <h1 className="text-sm font-semibold uppercase tracking-[0.25em] text-[#fafafa] mb-1">
-          Portfolio
-        </h1>
-        <p className="text-xs text-[#a1a1aa]">
-          Executor agent LP positions &mdash; skin in the game
-        </p>
-      </div>
+      <h1 className="text-xl font-bold tracking-tight mb-6">Portfolio</h1>
 
-      {/* Stats row */}
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mb-8">
-        <div className="flex items-center gap-2">
-          <Coins className="h-3.5 w-3.5 text-[#34d399]" />
-          <span className="text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">Invested</span>
-          <span className="text-lg font-semibold tabular-nums text-[#fafafa]">
-            ${portfolio?.totalInvested.toFixed(2) ?? "0.00"}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Layers className="h-3.5 w-3.5 text-[#8b5cf6]" />
-          <span className="text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">Positions</span>
-          <span className="text-lg font-semibold tabular-nums text-[#fafafa]">
-            {portfolio?.totalPositions ?? 0}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-3.5 w-3.5 text-[#34d399]" />
-          <span className="text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">Avg APR</span>
-          <span className="text-lg font-semibold tabular-nums text-[#34d399]">
-            {((portfolio?.avgApr ?? 0) * 100).toFixed(1)}%
-          </span>
-        </div>
-      </div>
-
-      {/* Executor address */}
-      {portfolio?.executorAddress && (
-        <div className="mb-6">
-          <a
-            href={`https://www.oklink.com/xlayer/address/${portfolio.executorAddress}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-mono text-[#a1a1aa]/60 hover:text-[#8b5cf6] transition-colors"
-          >
-            Executor: {portfolio.executorAddress}
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Positions */}
-      {(!portfolio || portfolio.positions.length === 0) ? (
-        <div className="py-16 text-center border border-[#27272a]/30 rounded-md">
-          <Coins className="h-8 w-8 text-[#27272a] mx-auto mb-4" />
-          <p className="text-sm text-[#a1a1aa]/60 mb-1">
-            No positions yet
-          </p>
-          <p className="text-xs text-[#a1a1aa]/30 max-w-sm mx-auto">
-            The Executor agent will invest in tokens rated SAFE by the Analyst.
-            Fund the Executor wallet with USDT to enable autonomous investing.
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-md border border-[#27272a]/50 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center gap-4 py-2 px-4 text-[10px] uppercase tracking-[0.12em] text-[#a1a1aa]/50 border-b border-[#27272a]/30">
-            <span className="w-24">Token</span>
-            <span className="flex-1">Pool</span>
-            <span className="w-20 text-right">Invested</span>
-            <span className="w-20 text-right">APR</span>
-            <span className="w-16 text-right">Range</span>
-            <span className="w-20 text-right">TVL</span>
-            <span className="w-16 text-right">When</span>
-          </div>
-          {portfolio.positions.map((pos, i) => (
-            <div
-              key={`${pos.token}-${pos.timestamp}`}
-              className={`flex items-center gap-4 py-2.5 px-4 text-xs ${i % 2 === 1 ? "bg-[#18181b]/40" : ""}`}
+      {/* Summary line */}
+      <div className="mb-6 text-xs font-mono text-[#52525b] flex flex-wrap gap-x-4 gap-y-1">
+        <span>Invested <span className="text-[#a1a1aa]">{fmt(portfolio?.totalInvested ?? 0)}</span></span>
+        <span>Positions <span className="text-[#a1a1aa]">{portfolio?.totalPositions ?? 0}</span></span>
+        <span>Avg APR <span className="text-[#a1a1aa]">{(portfolio?.avgApr ?? 0).toFixed(1)}%</span></span>
+        {portfolio?.executorAddress && (
+          <span>
+            Executor{" "}
+            <a
+              href={`https://www.oklink.com/xlayer/address/${portfolio.executorAddress}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#52525b] hover:text-[#a1a1aa] transition-colors"
             >
-              <span className="w-24 font-semibold text-[#fafafa] truncate">{pos.tokenSymbol}</span>
-              <div className="flex-1 min-w-0 flex items-center gap-2">
-                <span className="text-[#fafafa]/80 font-mono truncate">{pos.poolName}</span>
-                <span className="text-[10px] text-[#a1a1aa]/40">{pos.platformName}</span>
-              </div>
-              <span className="w-20 text-right font-mono tabular-nums text-[#fafafa]">
-                ${Number(pos.amountInvested).toFixed(2)}
-              </span>
-              <span className="w-20 text-right font-mono tabular-nums text-[#34d399]">
-                {(Number(pos.apr) * 100).toFixed(1)}%
-              </span>
-              <span className="w-16 text-right font-mono tabular-nums text-[#a1a1aa]">
-                {pos.range > 0 ? `\u00B1${pos.range}%` : "\u2014"}
-              </span>
-              <span className="w-20 text-right font-mono tabular-nums text-[#a1a1aa]">
-                {formatUsd(Number(pos.tvl))}
-              </span>
-              <span className="w-16 text-right text-[#a1a1aa]/50 tabular-nums">
-                {getTimeAgo(pos.timestamp)}
-              </span>
-            </div>
-          ))}
-        </div>
+              {truncAddr(portfolio.executorAddress)}
+            </a>
+          </span>
+        )}
+      </div>
+
+      {/* Positions table */}
+      {!portfolio || portfolio.positions.length === 0 ? (
+        <p className="text-sm text-[#52525b] py-8">
+          No positions yet. Executor invests in tokens rated SAFE.
+        </p>
+      ) : (
+        <table className="w-full text-xs font-mono">
+          <thead>
+            <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
+              <th className="pb-2 font-medium">Token</th>
+              <th className="pb-2 font-medium">Pool</th>
+              <th className="pb-2 font-medium text-right">Invested</th>
+              <th className="pb-2 font-medium text-right">APR</th>
+              <th className="pb-2 font-medium text-right hidden sm:table-cell">TVL</th>
+              <th className="pb-2 font-medium text-right hidden sm:table-cell">Range</th>
+              <th className="pb-2 font-medium text-right">Age</th>
+            </tr>
+          </thead>
+          <tbody>
+            {portfolio.positions.map((p, i) => (
+              <tr key={`${p.token}-${i}`} className="border-b border-white/[0.03]">
+                <td className="py-2 text-[#fafafa]">{p.tokenSymbol}</td>
+                <td className="py-2 text-[#a1a1aa]">{p.poolName}</td>
+                <td className="py-2 text-right text-[#a1a1aa]">{fmt(Number(p.amountInvested))}</td>
+                <td className="py-2 text-right text-[#34d399]">{(Number(p.apr) * 100).toFixed(1)}%</td>
+                <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">{fmt(Number(p.tvl))}</td>
+                <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">±{p.range}%</td>
+                <td className="py-2 text-right text-[#52525b]">{ago(p.timestamp)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
