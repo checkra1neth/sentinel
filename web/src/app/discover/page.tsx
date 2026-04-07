@@ -180,6 +180,7 @@ export default function DiscoverPage(): React.ReactNode {
         onFilterChange={setFilter}
         searchQuery={search}
         onSearchChange={handleSearchChange}
+        tokens={mergedTokens}
       />
       <ScreenerTable tokens={filtered} />
       <LeaderboardPanel />
