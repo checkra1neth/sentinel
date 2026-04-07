@@ -12,6 +12,7 @@ import { X402Client } from "./payments/x402-client.js";
 import { eventBus } from "./events/event-bus.js";
 import { createAgentWallets } from "./wallet/agentic-wallet.js";
 import type { BaseAgent } from "./agents/base-agent.js";
+import { settings } from "./settings.js";
 
 // ---------------------------------------------------------------------------
 // 1. Express app + http.Server
@@ -19,6 +20,8 @@ import type { BaseAgent } from "./agents/base-agent.js";
 
 const app = express();
 const server = http.createServer(app);
+
+settings.load();
 
 // ---------------------------------------------------------------------------
 // 2. CORS + JSON

@@ -4,6 +4,10 @@ import { type BaseAgent } from "../agents/base-agent.js";
 import { type ExecutorAgent } from "../agents/executor-agent.js";
 import { verdictStore } from "../verdicts/verdict-store.js";
 import { eventBus } from "../events/event-bus.js";
+import { settings } from "../settings.js";
+import { pendingStore } from "../pending-store.js";
+import { type ScannerAgent } from "../agents/scanner-agent.js";
+import { onchainosSignal } from "../lib/onchainos.js";
 
 // ---------------------------------------------------------------------------
 // Router factory — accepts agents map from index.ts
@@ -189,6 +193,112 @@ export function createServiceRouter(
       }
     },
   );
+
+  // ── Settings ──
+
+  router.get("/settings", (_req: Request, res: Response): void => {
+    res.json(settings.get());
+  });
+
+  router.patch("/settings", (req: Request, res: Response): void => {
+    const updated = settings.update(req.body ?? {});
+    res.json(updated);
+  });
+
+  // ── Discover ──
+
+  router.get("/discover/feed", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const scanner = agents["1"] as unknown as ScannerAgent | undefined;
+      if (!scanner) { res.status(503).json({ error: "Scanner not available" }); return; }
+      const tokens = await scanner.discoverTokens();
+      const limit = Number(req.query.limit ?? 50);
+      res.json({ tokens: tokens.slice(0, limit) });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/discover/whales", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const limit = Number(req.query.limit ?? 20);
+      const signals: Array<Record<string, unknown>> = [];
+
+      for (const tracker of ["whale", "smart_money", "degen"]) {
+        try {
+          const result = await onchainosSignal.activities(tracker);
+          if (result.success && Array.isArray(result.data)) {
+            for (const s of result.data as Array<Record<string, unknown>>) {
+              signals.push({ ...s, tracker });
+            }
+          }
+        } catch { /* tracker unavailable */ }
+      }
+
+      res.json({ signals: signals.slice(0, limit) });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/discover/scan", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const scanner = agents["1"] as unknown as ScannerAgent | undefined;
+      if (!scanner) { res.status(503).json({ error: "Scanner not available" }); return; }
+      const tokens = await scanner.autonomousLoop();
+      res.json({ triggered: true, tokensFound: tokens.length, tokens });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Pending ──
+
+  router.get("/pending/analyze", (_req: Request, res: Response): void => {
+    res.json({ tokens: pendingStore.getByStatus("awaiting_analyze") });
+  });
+
+  router.get("/pending/invest", (_req: Request, res: Response): void => {
+    res.json({ tokens: pendingStore.getByStatus("awaiting_invest") });
+  });
+
+  router.post("/pending/analyze/:token/approve", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.params;
+      const analyst = agents["2"];
+      if (!analyst) { res.status(503).json({ error: "Analyst not available" }); return; }
+      const result = await analyst.execute("scan", { token });
+      pendingStore.remove(token);
+      res.json({ result });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/pending/invest/:token/approve", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.params;
+      const pending = pendingStore.get(token);
+      const executor = agents["3"];
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const amount = String(settings.get().invest.maxPerPosition);
+      const result = await executor.execute("invest", {
+        token,
+        tokenSymbol: pending?.verdict?.tokenSymbol ?? token.slice(0, 8),
+        riskScore: pending?.verdict?.riskScore ?? 0,
+        amount,
+      });
+      pendingStore.remove(token);
+      res.json({ result });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.delete("/pending/:token", (req: Request, res: Response): void => {
+    const removed = pendingStore.remove(req.params.token);
+    res.json({ removed });
+  });
 
   return router;
 }
