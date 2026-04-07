@@ -50,5 +50,10 @@ export const config = {
     reinvestInterval: optional("REINVEST_CRON", "0 */6 * * *"),
   },
 
+  uniswap: {
+    apiKey: optional("UNISWAP_API_KEY"),
+    tradingApiUrl: "https://trade-api.gateway.uniswap.org/v1",
+  },
+
   port: Number(process.env.PORT ?? "3000"),
 } as const;
