@@ -1,28 +1,22 @@
 "use client";
 
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { Wallet } from "lucide-react";
+import { injected } from "wagmi/connectors";
 
 export function ConnectButton(): React.ReactNode {
   const { address, isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { connect } = useConnect();
   const { disconnect } = useDisconnect();
 
   if (isConnected && address) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 rounded-md border border-[#27272a] bg-[#18181b] px-3 py-1.5">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-[#34d399] opacity-40" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#34d399]" />
-          </span>
-          <span className="text-xs font-mono text-[#a1a1aa]">
-            {address.slice(0, 6)}...{address.slice(-4)}
-          </span>
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-mono text-[#a1a1aa]">
+          {address.slice(0, 6)}...{address.slice(-4)}
+        </span>
         <button
           onClick={() => disconnect()}
-          className="rounded-md border border-[#27272a] px-3 py-1.5 text-xs text-[#a1a1aa] hover:border-[#ef4444]/40 hover:text-[#ef4444] transition-all duration-200"
+          className="text-xs text-[#a1a1aa] hover:text-[#fafafa] transition-colors cursor-pointer"
         >
           Disconnect
         </button>
@@ -32,10 +26,9 @@ export function ConnectButton(): React.ReactNode {
 
   return (
     <button
-      onClick={() => connect({ connector: connectors[0] })}
-      className="inline-flex items-center gap-2 rounded-md bg-[#8b5cf6] px-4 py-1.5 text-xs font-semibold text-[#fafafa] hover:bg-[#a78bfa] transition-all duration-200"
+      onClick={() => connect({ connector: injected() })}
+      className="text-xs text-[#06b6d4] hover:text-[#fafafa] transition-colors cursor-pointer"
     >
-      <Wallet className="h-3.5 w-3.5" />
       Connect
     </button>
   );

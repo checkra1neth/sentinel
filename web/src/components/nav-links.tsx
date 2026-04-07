@@ -20,9 +20,9 @@ export function NavLinks(): React.ReactNode {
           <Link
             key={link.href}
             href={link.href}
-            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+            className={`px-3 py-1 text-xs font-medium transition-colors ${
               active
-                ? "text-[#fafafa] bg-[#27272a]"
+                ? "text-[#fafafa] bg-white/[0.06] rounded"
                 : "text-[#a1a1aa] hover:text-[#fafafa]"
             }`}
           >
