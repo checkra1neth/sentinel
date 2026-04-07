@@ -7,7 +7,8 @@ import { eventBus } from "../events/event-bus.js";
 import { settings } from "../settings.js";
 import { pendingStore } from "../pending-store.js";
 import { type ScannerAgent } from "../agents/scanner-agent.js";
-import { onchainosSignal } from "../lib/onchainos.js";
+import { onchainosSignal, onchainosSwap } from "../lib/onchainos.js";
+import { config } from "../config.js";
 
 // ---------------------------------------------------------------------------
 // Router factory — accepts agents map from index.ts
@@ -193,6 +194,62 @@ export function createServiceRouter(
       }
     },
   );
+
+  // ── Invest ──
+
+  router.post("/invest/preview", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const executor = agents["3"];
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const { token, amount } = req.body as { token?: string; amount?: string };
+      if (!token) { res.status(400).json({ error: "token required" }); return; }
+      const result = await executor.execute("preview", { token, amount });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/invest/execute", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const executor = agents["3"];
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const { token, amount, tokenSymbol, riskScore } = req.body as {
+        token?: string; amount?: string; tokenSymbol?: string; riskScore?: number;
+      };
+      if (!token) { res.status(400).json({ error: "token required" }); return; }
+      const result = await executor.execute("invest", {
+        token,
+        amount: amount ?? String(settings.get().invest.maxPerPosition),
+        tokenSymbol: tokenSymbol ?? token.slice(0, 8),
+        riskScore: riskScore ?? 15,
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/invest/swap", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { fromToken, toToken, amount } = req.body as {
+        fromToken?: string; toToken?: string; amount?: string;
+      };
+      if (!fromToken || !toToken || !amount) {
+        res.status(400).json({ error: "fromToken, toToken, amount required" });
+        return;
+      }
+      const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+
+      const result = onchainosSwap.execute(
+        fromToken, toToken, amount, executor.walletAddress, config.chainId,
+      );
+      res.json({ success: result.success, data: result.data, error: result.success ? undefined : "Swap failed" });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
 
   // ── Analyze ──
 
