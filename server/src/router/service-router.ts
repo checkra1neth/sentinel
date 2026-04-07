@@ -7,7 +7,7 @@ import { eventBus } from "../events/event-bus.js";
 import { settings } from "../settings.js";
 import { pendingStore } from "../pending-store.js";
 import { type ScannerAgent } from "../agents/scanner-agent.js";
-import { onchainosSignal, onchainosSwap } from "../lib/onchainos.js";
+import { onchainosSignal, onchainosSwap, onchainosMarket, onchainosPortfolio, onchainosDefi } from "../lib/onchainos.js";
 import { config } from "../config.js";
 
 // ---------------------------------------------------------------------------
@@ -194,6 +194,84 @@ export function createServiceRouter(
       }
     },
   );
+
+  // ── Manage ──
+
+  router.get("/manage/portfolio", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const executor = agents["3"] as unknown as ExecutorAgent | undefined;
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+
+      const positions = executor.lpPositions;
+
+      let walletBalances: unknown = null;
+      try {
+        const balResult = onchainosPortfolio.allBalances(executor.walletAddress);
+        if (balResult.success) walletBalances = balResult.data;
+      } catch { /* */ }
+
+      let totalValue: unknown = null;
+      try {
+        const valResult = onchainosPortfolio.totalValue(executor.walletAddress);
+        if (valResult.success) totalValue = valResult.data;
+      } catch { /* */ }
+
+      let defiPositions: unknown = null;
+      try {
+        const posResult = onchainosDefi.positions(executor.walletAddress);
+        if (posResult.success) defiPositions = posResult.data;
+      } catch { /* */ }
+
+      res.json({
+        positions,
+        totalPositions: positions.length,
+        walletBalances,
+        totalValue,
+        defiPositions,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/manage/collect-all", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const executor = agents["3"];
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const result = await executor.execute("collect", {});
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/manage/exit/:investmentId", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const executor = agents["3"];
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const investmentId = Number(req.params.investmentId);
+      const ratio = (req.body as Record<string, unknown>)?.ratio as string | undefined;
+      const result = await executor.execute("exit", { investmentId, ratio });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/manage/balances", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const balances: Record<string, unknown> = {};
+      for (const [id, agent] of Object.entries(agents)) {
+        try {
+          const bal = await agent.wallet.getUsdtBalance();
+          balances[agent.name] = { id, address: agent.walletAddress, usdtBalance: bal };
+        } catch { /* */ }
+      }
+      res.json({ balances });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
 
   // ── Invest ──
 

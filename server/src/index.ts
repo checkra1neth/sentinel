@@ -3,6 +3,7 @@ import http from "http";
 import { config } from "./config.js";
 import { createServiceRouter } from "./router/service-router.js";
 import { startReinvestScheduler } from "./scheduler/reinvest.js";
+import { startManageLoop } from "./scheduler/manage-loop.js";
 import { startSentinelLoop } from "./scheduler/cron-loop.js";
 import { ScannerAgent } from "./agents/scanner-agent.js";
 import { AnalystAgent } from "./agents/analyst-agent.js";
@@ -130,7 +131,16 @@ const reinvestTask = startReinvestScheduler(
 );
 
 // ---------------------------------------------------------------------------
-// 12. Listen
+// 12. Manage loop (position sync, stop-loss, fee collection)
+// ---------------------------------------------------------------------------
+
+const manageLoop = startManageLoop(
+  executor,
+  (event) => eventBus.emit(event),
+);
+
+// ---------------------------------------------------------------------------
+// 13. Listen
 // ---------------------------------------------------------------------------
 
 server.listen(config.port, () => {
@@ -145,4 +155,4 @@ server.listen(config.port, () => {
   console.log("");
 });
 
-export { app, server, agents, decisionEngine, eventBus, sentinelLoop, reinvestTask };
+export { app, server, agents, decisionEngine, eventBus, sentinelLoop, reinvestTask, manageLoop };
