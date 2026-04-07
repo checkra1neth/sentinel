@@ -71,12 +71,14 @@ export function TabOverview({ address, verdict }: TabOverviewProps): React.React
           <KVRow label="Sell Tax" value={`${verdict?.sellTax ?? 0}%`} />
           <KVRow label="Holder Concentration" value={`${verdict?.holderConcentration ?? 0}%`} />
         </div>
-        <div>
-          <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Cluster Analysis</div>
-          <KVRow label="Rug Pull %" value={cluster?.rugPullPercent != null ? `${cluster.rugPullPercent}%` : "—"} />
-          <KVRow label="New Address %" value={cluster?.holderNewAddressPercent != null ? `${cluster.holderNewAddressPercent}%` : "—"} />
-          <KVRow label="Same Fund Source %" value={cluster?.holderSameFundSourcePercent != null ? `${cluster.holderSameFundSourcePercent}%` : "—"} />
-        </div>
+        {cluster?.rugPullPercent != null && (
+          <div>
+            <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Cluster Analysis</div>
+            <KVRow label="Rug Pull %" value={`${cluster.rugPullPercent}%`} />
+            <KVRow label="New Address %" value={cluster?.holderNewAddressPercent != null ? `${cluster.holderNewAddressPercent}%` : "—"} />
+            <KVRow label="Same Fund Source %" value={cluster?.holderSameFundSourcePercent != null ? `${cluster.holderSameFundSourcePercent}%` : "—"} />
+          </div>
+        )}
       </div>
       <div>
         <div className="mb-5">
