@@ -9,6 +9,8 @@ import { pendingStore } from "../pending-store.js";
 import { type ScannerAgent } from "../agents/scanner-agent.js";
 import { onchainosSignal, onchainosSwap, onchainosMarket, onchainosPortfolio, onchainosDefi } from "../lib/onchainos.js";
 import { config } from "../config.js";
+import { getTokenPairs, searchTokens, getTrendingTokens } from "../lib/dexscreener.js";
+import { getUniswapPools, getPoolApy } from "../lib/defillama.js";
 
 // ---------------------------------------------------------------------------
 // Router factory — accepts agents map from index.ts
@@ -194,6 +196,55 @@ export function createServiceRouter(
       }
     },
   );
+
+  // ── DexScreener ──
+
+  router.get("/dex/pairs/:token", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const pairs = await getTokenPairs("xlayer", req.params.token);
+      res.json({ pairs });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/dex/search", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const q = String(req.query.q ?? "");
+      if (!q) { res.status(400).json({ error: "q parameter required" }); return; }
+      const pairs = await searchTokens(q);
+      res.json({ pairs });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/dex/trending", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const tokens = await getTrendingTokens();
+      res.json({ tokens });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── DefiLlama ──
+
+  router.get("/yields", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const symbol = String(req.query.symbol ?? "");
+      const chain = req.query.chain as string | undefined;
+      if (symbol) {
+        const pool = await getPoolApy(symbol, chain);
+        res.json({ pool });
+      } else {
+        const pools = await getUniswapPools(chain);
+        res.json({ pools: pools.slice(0, 50) });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
 
   // ── Manage ──
 
