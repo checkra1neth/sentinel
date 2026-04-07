@@ -151,8 +151,8 @@ export const onchainosMarket = {
   prices: (tokens: string[], chainId: number = 196): OnchainosResult<unknown> =>
     onchainos(`market prices --tokens ${tokens.join(",")} --chain ${chainId}`),
 
-  kline: (token: string, chainId: number = 196, interval?: string): OnchainosResult<unknown> =>
-    onchainos(`market kline --address ${token} --chain ${chainId}${interval ? ` --interval ${interval}` : ""}`),
+  kline: (token: string, chainId: number = 196): OnchainosResult<unknown> =>
+    onchainos(`market kline --address ${token} --chain ${chainId}`),
 };
 
 // ---------------------------------------------------------------------------
