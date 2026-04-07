@@ -6,6 +6,7 @@ import {
   onchainosToken,
 } from "../lib/onchainos.js";
 import { config } from "../config.js";
+import { settings } from "../settings.js";
 import { verdictStore } from "../verdicts/verdict-store.js";
 
 // ---------------------------------------------------------------------------
@@ -79,81 +80,81 @@ export class ScannerAgent extends BaseAgent {
   // -------------------------------------------------------------------------
 
   async discoverTokens(): Promise<TokenCandidate[]> {
-    const seen = new Set<string>();
+    const cfg = settings.get().discover;
     const candidates: TokenCandidate[] = [];
+    const seen = new Set<string>();
 
-    const addCandidate = (
-      address: string | undefined,
-      source: string,
-      name?: string,
-    ): void => {
-      if (!address) return;
+    const add = (address: string, source: string, name?: string): void => {
       const normalized = address.toLowerCase();
       if (seen.has(normalized)) return;
       seen.add(normalized);
       candidates.push({ address: normalized, source, name });
     };
 
-    // 1. New trenches tokens
-    const newResult = onchainosTrenches.tokens("NEW");
-    if (newResult.success && newResult.data) {
-      const items = Array.isArray(newResult.data)
-        ? newResult.data
-        : [newResult.data];
-      for (const item of items as Array<Record<string, unknown>>) {
-        const addr = String(
-          item.tokenAddress ?? item.address ?? item.token ?? "",
-        );
-        addCandidate(addr, "trenches_new", item.name as string | undefined);
-      }
+    // Trenches — all configured stages
+    for (const stage of cfg.sources) {
+      try {
+        const result = await onchainosTrenches.tokens(stage, config.chainId);
+        if (result.success && Array.isArray(result.data)) {
+          for (const t of result.data as Array<Record<string, string>>) {
+            const addr = t.tokenAddress ?? t.address ?? t.token;
+            if (addr) add(addr, `trenches_${stage.toLowerCase()}`, t.tokenSymbol ?? t.symbol);
+          }
+        }
+      } catch { /* source unavailable */ }
     }
 
-    // 2. Migrated trenches tokens
-    const migratedResult = onchainosTrenches.tokens("MIGRATED");
-    if (migratedResult.success && migratedResult.data) {
-      const items = Array.isArray(migratedResult.data)
-        ? migratedResult.data
-        : [migratedResult.data];
-      for (const item of items as Array<Record<string, unknown>>) {
-        const addr = String(
-          item.tokenAddress ?? item.address ?? item.token ?? "",
-        );
-        addCandidate(
-          addr,
-          "trenches_migrated",
-          item.name as string | undefined,
-        );
-      }
+    // Smart money signals
+    if (cfg.trackSmartMoney) {
+      try {
+        const result = await onchainosSignal.activities("smart_money", config.chainId);
+        if (result.success && Array.isArray(result.data)) {
+          for (const s of result.data as Array<Record<string, string>>) {
+            const addr = s.tokenAddress ?? s.token;
+            if (addr) add(addr, "smart_money", s.tokenSymbol);
+          }
+        }
+      } catch { /* */ }
     }
 
-    // 3. Smart money signals
-    const signalResult = onchainosSignal.activities("smart_money", config.chainId);
-    if (signalResult.success && signalResult.data) {
-      const items = Array.isArray(signalResult.data)
-        ? signalResult.data
-        : [signalResult.data];
-      for (const item of items as Array<Record<string, unknown>>) {
-        const addr = String(
-          item.tokenAddress ?? item.token ?? item.address ?? "",
-        );
-        addCandidate(addr, "smart_money", item.name as string | undefined);
-      }
+    // Whale signals
+    if (cfg.trackWhales) {
+      try {
+        const result = await onchainosSignal.activities("whale", config.chainId);
+        if (result.success && Array.isArray(result.data)) {
+          for (const s of result.data as Array<Record<string, string>>) {
+            const addr = s.tokenAddress ?? s.token;
+            if (addr) add(addr, "whale", s.tokenSymbol);
+          }
+        }
+      } catch { /* */ }
     }
 
-    // 4. Hot tokens
-    const hotResult = onchainosToken.hotTokens();
-    if (hotResult.success && hotResult.data) {
-      const items = Array.isArray(hotResult.data)
-        ? hotResult.data
-        : [hotResult.data];
-      for (const item of items as Array<Record<string, unknown>>) {
-        const addr = String(
-          item.address ?? item.tokenAddress ?? item.token ?? "",
-        );
-        addCandidate(addr, "hot_tokens", item.name as string | undefined);
-      }
+    // Degen signals
+    if (cfg.trackDegen) {
+      try {
+        const result = await onchainosSignal.activities("degen", config.chainId);
+        if (result.success && Array.isArray(result.data)) {
+          for (const s of result.data as Array<Record<string, string>>) {
+            const addr = s.tokenAddress ?? s.token;
+            if (addr) add(addr, "degen", s.tokenSymbol);
+          }
+        }
+      } catch { /* */ }
     }
 
+    // Hot tokens
+    try {
+      const result = await onchainosToken.hotTokens();
+      if (result.success && Array.isArray(result.data)) {
+        for (const t of result.data as Array<Record<string, string>>) {
+          const addr = t.tokenContractAddress ?? t.address ?? t.token;
+          if (addr) add(addr, "hot_token", t.tokenSymbol ?? t.symbol);
+        }
+      }
+    } catch { /* */ }
+
+    this.log(`Discovered ${candidates.length} unique tokens from ${cfg.sources.length} trenches stages + signals`);
     return candidates;
   }
 }

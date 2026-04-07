@@ -2,7 +2,9 @@ import { type ScannerAgent } from "./scanner-agent.js";
 import { type AnalystAgent } from "./analyst-agent.js";
 import { type ExecutorAgent } from "./executor-agent.js";
 import { type X402Client } from "../payments/x402-client.js";
-import type { AgentEvent, Verdict } from "../types.js";
+import type { AgentEvent } from "../types.js";
+import { settings } from "../settings.js";
+import { pendingStore } from "../pending-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,7 +77,16 @@ export class DecisionEngine {
   // -------------------------------------------------------------------------
 
   private async processToken(address: string, source: string): Promise<void> {
-    // 1. Buy Analyst scan via x402
+    const cfg = settings.get();
+
+    // If analyze mode is manual — queue for user review
+    if (cfg.analyze.mode === "manual") {
+      pendingStore.add(address, source, "awaiting_analyze");
+      this.emitEvent("log", `Queued ${address} for manual analysis (source: ${source})`);
+      return;
+    }
+
+    // Auto-analyze
     this.emitEvent("buy_service", `Buying Analyst scan for ${address} (${source})`, {
       token: address,
       source,
@@ -88,49 +99,56 @@ export class DecisionEngine {
     );
 
     if (!scanResult.success) {
-      this.emitEvent("error", `Analyst scan failed for ${address}: ${scanResult.error}`, {
-        token: address,
-      });
+      this.emitEvent("error", `Analyst scan failed for ${address}: ${scanResult.error}`, { token: address });
       return;
     }
 
-    const verdict = scanResult.result as Verdict | undefined;
-    const verdictLabel = verdict?.verdict ?? "UNKNOWN";
-    const riskScore = verdict?.riskScore ?? -1;
+    const result = scanResult.result as Record<string, unknown> | undefined;
+    const verdict = result?.verdict as string | undefined;
+    const verdictLabel = (verdict ?? "UNKNOWN").toUpperCase();
+    const riskScore = (result?.riskScore as number) ?? 100;
+    const tokenSymbol = (result?.tokenSymbol as string) ?? address.slice(0, 8);
 
-    this.emitEvent("scan", `Verdict for ${address}: ${verdictLabel} (risk ${riskScore})`, {
+    this.emitEvent("scan", `${tokenSymbol} verdict: ${verdictLabel} (risk ${riskScore})`, {
       token: address,
+      tokenSymbol,
       verdict: verdictLabel,
       riskScore,
     });
 
-    // 2. If SAFE -> buy Executor invest (skin in the game)
     if (verdictLabel === "SAFE") {
-      const tokenSymbol = verdict?.tokenSymbol ?? address.slice(0, 8);
-      this.emitEvent("buy_service", `${tokenSymbol} is SAFE (risk ${riskScore}) -> investing via Executor`, {
+      // If invest mode is manual — queue for user review
+      if (cfg.invest.mode === "manual") {
+        pendingStore.add(address, source, "awaiting_invest");
+        pendingStore.setVerdict(address, { riskScore, verdict: verdictLabel, tokenSymbol });
+        this.emitEvent("log", `${tokenSymbol} is SAFE — queued for manual investment`);
+        return;
+      }
+
+      // Auto-invest
+      const amount = String(cfg.invest.maxPerPosition);
+      this.emitEvent("buy_service", `${tokenSymbol} is SAFE (risk ${riskScore}) -> investing ${amount} USDT via Executor`, {
         token: address,
-        tokenSymbol,
         riskScore,
       });
 
       const investResult = await this.services.executor.x402.buyService(
         this.services.executor.serviceId,
         "invest",
-        { token: address, tokenSymbol, riskScore, amount: "10" },
+        { token: address, tokenSymbol, riskScore, amount },
       );
 
-      this.emitEvent(
-        investResult.success ? "invest" : "error",
-        investResult.success
-          ? `Invested in ${address} via Executor`
-          : `Executor invest failed for ${address}: ${investResult.error}`,
-        { token: address, result: investResult },
-      );
+      if (investResult.success) {
+        this.emitEvent("invest", `Invested ${amount} USDT in ${tokenSymbol}`, {
+          token: address,
+          amount,
+          txHash: investResult.txHash,
+        });
+      } else {
+        this.emitEvent("error", `Executor invest failed for ${tokenSymbol}: ${investResult.error}`, { token: address });
+      }
     } else {
-      this.emitEvent("scan", `${address} verdict=${verdictLabel} -> skipping invest`, {
-        token: address,
-        verdict: verdictLabel,
-      });
+      this.emitEvent("scan", `${tokenSymbol} is ${verdictLabel} (risk ${riskScore}) — skipping`, { token: address, verdict: verdictLabel });
     }
   }
 
