@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 
@@ -7,6 +8,18 @@ export function ConnectButton(): React.ReactNode {
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
   const { disconnect } = useDisconnect();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Prevent hydration mismatch — always render the same thing on server
+  if (!mounted) {
+    return (
+      <button className="text-xs text-[#06b6d4] hover:text-[#fafafa] transition-colors cursor-pointer">
+        Connect
+      </button>
+    );
+  }
 
   if (isConnected && address) {
     return (
