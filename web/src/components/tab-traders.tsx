@@ -3,20 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchTopTraders, fetchTokenTrades, truncAddr, timeAgo, formatUsd } from "../lib/api";
 
-const TAG_STYLE: Record<string, string> = {
-  "3": "text-[#a78bfa] bg-[rgba(167,139,250,0.08)]",
-  "4": "text-[#34d399] bg-[rgba(52,211,153,0.08)]",
-  "1": "text-[#f59e0b] bg-[rgba(245,158,11,0.08)]",
-};
-
-function tagLabel(tag: string | number): string {
-  const t = String(tag);
-  if (t === "3") return "smart $";
-  if (t === "4") return "whale";
-  if (t === "1") return "kol";
-  return "normal";
-}
-
 export function TabTraders({ address }: { address: string }): React.ReactNode {
   const { data: tradersData } = useQuery({
     queryKey: ["traders-full", address],
@@ -39,28 +25,36 @@ export function TabTraders({ address }: { address: string }): React.ReactNode {
           <thead>
             <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
               <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase">Tag</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">PnL</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Buy Vol</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Sell Vol</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Trades</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Total PnL</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Realized</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Unrealized</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Hold %</th>
             </tr>
           </thead>
           <tbody>
             {traders.map((t, i) => {
-              const pnl = Number(t.realizedPnlUsd ?? t.pnl ?? t.profit ?? 0);
+              const totalPnl = Number(t.totalPnlUsd ?? t.realizedPnlUsd ?? 0);
+              const realized = Number(t.realizedPnlUsd ?? 0);
+              const unrealized = Number(t.unrealizedPnlUsd ?? 0);
               return (
                 <tr key={i} className="border-b border-white/[0.03]">
-                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? t.traderAddress ?? t.address ?? ""))}</td>
-                  <td className="py-1.5"><span className={`inline-block px-1 py-px rounded text-[9px] font-medium ${TAG_STYLE[String(t.tag ?? "")] ?? "text-[#52525b] bg-white/[0.04]"}`}>{tagLabel(String(t.tag ?? ""))}</span></td>
-                  <td className={`py-1.5 text-right ${pnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString()}</td>
-                  <td className="py-1.5 text-right text-[#a1a1aa] hidden sm:table-cell">{String(t.buyVolume ?? "—")}</td>
-                  <td className="py-1.5 text-right text-[#a1a1aa] hidden sm:table-cell">{String(t.sellVolume ?? "—")}</td>
-                  <td className="py-1.5 text-right text-[#a1a1aa]">{String(t.tradeCount ?? t.txCount ?? "—")}</td>
+                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? ""))}</td>
+                  <td className={`py-1.5 text-right ${totalPnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                    {totalPnl >= 0 ? "+" : ""}${Math.abs(totalPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </td>
+                  <td className={`py-1.5 text-right hidden sm:table-cell ${realized >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                    {realized >= 0 ? "+" : ""}${Math.abs(realized).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </td>
+                  <td className={`py-1.5 text-right hidden sm:table-cell ${unrealized >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                    {unrealized >= 0 ? "+" : ""}${Math.abs(unrealized).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </td>
+                  <td className="py-1.5 text-right text-[#a1a1aa]">
+                    {t.holdPercent ? `${Number(t.holdPercent).toFixed(2)}%` : "—"}
+                  </td>
                 </tr>
               );
             })}
-            {traders.length === 0 && <tr><td colSpan={6} className="py-4 text-[#52525b]">No trader data.</td></tr>}
+            {traders.length === 0 && <tr><td colSpan={5} className="py-4 text-[#52525b]">No trader data.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -71,25 +65,27 @@ export function TabTraders({ address }: { address: string }): React.ReactNode {
             <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
               <th className="pb-1.5 font-medium text-[10px] uppercase">Type</th>
               <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Amount</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase hidden sm:table-cell">DEX</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Volume</th>
               <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Price</th>
               <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Time</th>
             </tr>
           </thead>
           <tbody>
             {trades.map((t, i) => {
-              const isBuy = String(t.type ?? t.side ?? "").toLowerCase().includes("buy");
+              const isBuy = String(t.type ?? "").toLowerCase().includes("buy");
               return (
                 <tr key={i} className="border-b border-white/[0.03]">
                   <td className={`py-1.5 ${isBuy ? "text-[#34d399]" : "text-[#ef4444]"}`}>{isBuy ? "BUY" : "SELL"}</td>
-                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? t.traderAddress ?? t.address ?? ""))}</td>
-                  <td className="py-1.5 text-right text-[#a1a1aa]">{t.amount ? formatUsd(Number(t.amount)) : "—"}</td>
+                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.userAddress ?? ""))}</td>
+                  <td className="py-1.5 text-[#52525b] hidden sm:table-cell">{String(t.dexName ?? "—")}</td>
+                  <td className="py-1.5 text-right text-[#a1a1aa]">{t.volume ? formatUsd(Number(t.volume)) : "—"}</td>
                   <td className="py-1.5 text-right text-[#a1a1aa] hidden sm:table-cell">{t.price ? formatUsd(Number(t.price)) : "—"}</td>
-                  <td className="py-1.5 text-right text-[#52525b]">{t.timestamp ? timeAgo(Number(t.timestamp)) : "—"}</td>
+                  <td className="py-1.5 text-right text-[#52525b]">{t.time ? timeAgo(Number(t.time)) : "—"}</td>
                 </tr>
               );
             })}
-            {trades.length === 0 && <tr><td colSpan={5} className="py-4 text-[#52525b]">No trade data.</td></tr>}
+            {trades.length === 0 && <tr><td colSpan={6} className="py-4 text-[#52525b]">No trade data.</td></tr>}
           </tbody>
         </table>
       </div>

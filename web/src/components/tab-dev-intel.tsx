@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchDevInfo, fetchSimilarTokens, fetchBundleInfo, fetchApedWallets, truncAddr, timeAgo } from "../lib/api";
+import { fetchDevInfo, fetchSimilarTokens, fetchBundleInfo, fetchApedWallets, truncAddr, timeAgo, formatUsd } from "../lib/api";
 
 function KV({ label, value }: { label: string; value: React.ReactNode }): React.ReactNode {
   return (
@@ -26,6 +26,13 @@ export function TabDevIntel({ address }: { address: string }): React.ReactNode {
 
   const rugCount = Number(devInfo?.rugPullCount ?? 0);
 
+  // Bundle: show structured data, not raw JSON
+  const bundleAmount = String(bundle?.bundledTokenAmount ?? "");
+  const bundleNative = String(bundle?.bundledValueNative ?? "");
+  const bundleAth = String(bundle?.bundlerAthPercent ?? "");
+  const totalBundlers = String(bundle?.totalBundlers ?? "");
+  const hasBundleData = bundleAmount || bundleNative || totalBundlers;
+
   return (
     <div className="py-5 space-y-6">
       <div>
@@ -36,50 +43,64 @@ export function TabDevIntel({ address }: { address: string }): React.ReactNode {
         <KV label="Rug Pull Count" value={<span className={rugCount > 0 ? "text-[#ef4444]" : "text-[#34d399]"}>{rugCount}</span>} />
         <KV label="Total Tokens Launched" value={String(devInfo?.totalTokens ?? devInfo?.tokenCount ?? "—")} />
         <KV label="Migrated Count" value={String(devInfo?.migratedCount ?? "—")} />
-        <KV label="Holding Info" value={String(devInfo?.holdingInfo ?? devInfo?.holding ?? "—")} />
       </div>
+
       {similar.length > 0 && (
         <div>
           <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Similar Tokens by Dev</div>
           <table className="w-full text-[11px] font-mono">
             <thead><tr className="text-[#52525b] text-left border-b border-white/[0.06]">
               <th className="pb-1.5 font-medium text-[10px] uppercase">Token</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase">Status</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">MCap</th>
               <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Created</th>
             </tr></thead>
             <tbody>
               {similar.map((s, i) => (
                 <tr key={i} className="border-b border-white/[0.03]">
-                  <td className="py-1.5 text-[#a1a1aa]">{String(s.tokenSymbol ?? s.symbol ?? s.name ?? "—")}</td>
-                  <td className="py-1.5 text-[#52525b]">{String(s.stage ?? s.status ?? "—")}</td>
-                  <td className="py-1.5 text-right text-[#52525b]">{s.timestamp ? timeAgo(Number(s.timestamp)) : "—"}</td>
+                  <td className="py-1.5 text-[#a1a1aa]">{String(s.tokenSymbol ?? "—")}</td>
+                  <td className="py-1.5 text-right text-[#a1a1aa]">{s.marketCapUsd ? formatUsd(Number(s.marketCapUsd)) : "—"}</td>
+                  <td className="py-1.5 text-right text-[#52525b]">{s.createdTimestamp ? timeAgo(Number(s.createdTimestamp)) : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {bundle && (
+
+      {hasBundleData && (
         <div>
           <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Bundle Info</div>
-          <div className="text-[11px] font-mono text-[#a1a1aa] whitespace-pre-wrap">{JSON.stringify(bundle, null, 2).slice(0, 500)}</div>
+          <KV label="Total Bundlers" value={totalBundlers || "—"} />
+          <KV label="Bundled Token Amount" value={bundleAmount || "—"} />
+          <KV label="Bundled Native Value" value={bundleNative || "—"} />
+          <KV label="Bundler ATH %" value={bundleAth ? `${bundleAth}%` : "—"} />
         </div>
       )}
+
       {aped.length > 0 && (
         <div>
           <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Aped Wallets</div>
           <table className="w-full text-[11px] font-mono">
             <thead><tr className="text-[#52525b] text-left border-b border-white/[0.06]">
               <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Amount</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase">Type</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Holding</th>
+              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">PnL</th>
             </tr></thead>
             <tbody>
-              {aped.map((a, i) => (
-                <tr key={i} className="border-b border-white/[0.03]">
-                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(a.address ?? a.walletAddress ?? ""))}</td>
-                  <td className="py-1.5 text-right text-[#a1a1aa]">{String(a.amount ?? a.value ?? "—")}</td>
-                </tr>
-              ))}
+              {aped.map((a, i) => {
+                const pnl = Number(a.totalPnl ?? 0);
+                return (
+                  <tr key={i} className="border-b border-white/[0.03]">
+                    <td className="py-1.5 text-[#52525b]">{truncAddr(String(a.walletAddress ?? ""))}</td>
+                    <td className="py-1.5 text-[#a1a1aa]">{String(a.walletType ?? "—")}</td>
+                    <td className="py-1.5 text-right text-[#a1a1aa]">{a.holdingUsd ? formatUsd(Number(a.holdingUsd)) : "—"}</td>
+                    <td className={`py-1.5 text-right ${pnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                      {pnl !== 0 ? `${pnl >= 0 ? "+" : ""}${formatUsd(Math.abs(pnl))}` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
