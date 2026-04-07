@@ -198,6 +198,7 @@ export class ExecutorAgent extends BaseAgent {
         config.contracts.usdt,
         token,
         investAmount,
+        this.walletAddress,
         config.chainId,
       );
 

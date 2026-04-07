@@ -103,6 +103,7 @@ export function startReinvestScheduler(
             config.contracts.usdt,
             WOKB,
             halfAmount,
+            agent.walletAddress,
             config.chainId,
           );
 
@@ -149,6 +150,7 @@ export function startReinvestScheduler(
               config.contracts.usdt,
               WOKB,
               reinvestRaw,
+              agent.walletAddress,
             );
 
             emit(
@@ -168,6 +170,7 @@ export function startReinvestScheduler(
             config.contracts.usdt,
             WOKB,
             reinvestRaw,
+            agent.walletAddress,
           );
 
           emit(

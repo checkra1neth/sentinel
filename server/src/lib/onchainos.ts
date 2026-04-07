@@ -101,10 +101,10 @@ export const onchainosSecurity = {
 
 export const onchainosSwap = {
   quote: (from: string, to: string, amount: string, chainId: number = 196): OnchainosResult<unknown> =>
-    onchainos(`swap quote --from ${from} --to ${to} --amount ${amount} --chain ${chainId}`),
+    onchainos(`swap quote --from ${from} --to ${to} --readable-amount ${amount} --chain ${chainId}`),
 
-  execute: (from: string, to: string, amount: string, chainId: number = 196, slippage?: string): OnchainosResult<unknown> =>
-    onchainos(`swap execute --from ${from} --to ${to} --amount ${amount} --chain ${chainId}${slippage ? ` --slippage ${slippage}` : ""}`),
+  execute: (from: string, to: string, amount: string, wallet: string, chainId: number = 196, slippage?: string): OnchainosResult<unknown> =>
+    onchainos(`swap execute --from ${from} --to ${to} --readable-amount ${amount} --wallet ${wallet} --chain ${chainId}${slippage ? ` --slippage ${slippage}` : ""}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -177,16 +177,16 @@ export const onchainosDefi = {
     onchainos(`defi invest --investment-id ${investmentId} --address ${address} --token ${token} --amount ${amount} --chain ${chainId}${range ? ` --range ${range}` : ""}`),
 
   /** Withdraw from a DeFi position */
-  withdraw: (investmentId: number, address: string, amount: string): OnchainosResult<unknown> =>
-    onchainos(`defi withdraw --investment-id ${investmentId} --address ${address} --amount ${amount}`),
+  withdraw: (investmentId: number, address: string, chainId: number = 196, ratio: string = "1"): OnchainosResult<unknown> =>
+    onchainos(`defi withdraw --investment-id ${investmentId} --address ${address} --chain ${chainId} --ratio ${ratio}`),
 
   /** Get user DeFi holdings overview */
   positions: (address: string, chains: string = "xlayer"): OnchainosResult<unknown> =>
     onchainos(`defi positions --address ${address} --chains ${chains}`),
 
   /** Collect rewards from position */
-  collect: (investmentId: number, address: string): OnchainosResult<unknown> =>
-    onchainos(`defi collect --investment-id ${investmentId} --address ${address}`),
+  collect: (address: string, chainId: number = 196, rewardType: string = "V3_FEE", investmentId?: number): OnchainosResult<unknown> =>
+    onchainos(`defi collect --address ${address} --chain ${chainId} --reward-type ${rewardType}${investmentId ? ` --investment-id ${investmentId}` : ""}`),
 };
 
 // ---------------------------------------------------------------------------
