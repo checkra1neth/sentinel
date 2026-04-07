@@ -5,6 +5,7 @@ import {
   onchainosSignal,
   onchainosToken,
 } from "../lib/onchainos.js";
+import { getTrendingTokens } from "../lib/dexscreener.js";
 import { config } from "../config.js";
 import { settings } from "../settings.js";
 import { verdictStore } from "../verdicts/verdict-store.js";
@@ -160,6 +161,17 @@ export class ScannerAgent extends BaseAgent {
         }
       }
     } catch { /* */ }
+
+    // DexScreener trending/promoted tokens
+    try {
+      const trending = await getTrendingTokens();
+      const xlayerTrending = trending.filter((t) =>
+        String(t.chainId) === "196" || String(t.chainId).toLowerCase() === "xlayer"
+      );
+      for (const t of xlayerTrending) {
+        if (t.tokenAddress) add(t.tokenAddress, "dexscreener_trending");
+      }
+    } catch { /* DexScreener unavailable */ }
 
     this.log(`Discovered ${candidates.length} unique tokens from ${cfg.sources.length} trenches stages + signals`);
     return candidates;
