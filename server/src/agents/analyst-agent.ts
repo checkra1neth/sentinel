@@ -6,7 +6,9 @@ import {
   onchainosSecurity,
   onchainosTrenches,
   onchainosDefi,
+  onchainosMarket,
 } from "../lib/onchainos.js";
+import { settings } from "../settings.js";
 import { okxTokenSecurity } from "../lib/okx-api.js";
 import { getPool, getPoolInfo } from "../lib/uniswap.js";
 import { config } from "../config.js";
@@ -47,8 +49,9 @@ async function safeCall<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 function classifyVerdict(score: number): Verdict["verdict"] {
-  if (score <= 15) return "SAFE";
-  if (score <= 40) return "CAUTION";
+  const threshold = settings.get().analyze.riskThreshold;
+  if (score <= Math.floor(threshold * 0.375)) return "SAFE";
+  if (score <= threshold) return "CAUTION";
   return "DANGEROUS";
 }
 
@@ -381,6 +384,65 @@ export class AnalystAgent extends BaseAgent {
       risks.push(`crash_24h(${priceChange24H.toFixed(0)}%)`);
       riskScore += 15;
     }
+
+    // --- Source H: Kline candle analysis (volatility + trend) ---
+    if (settings.get().analyze.useKline) {
+      try {
+        const klineResult = onchainosMarket.kline(tokenAddress, config.chainId);
+        if (klineResult.success && Array.isArray(klineResult.data)) {
+          const candles = klineResult.data as Array<{ o: string; h: string; l: string; c: string; vol: string; ts: string }>;
+          if (candles.length >= 3) {
+            const ranges = candles.slice(0, 12).map((c) => {
+              const high = Number(c.h);
+              const low = Number(c.l);
+              const mid = (high + low) / 2;
+              return mid > 0 ? ((high - low) / mid) * 100 : 0;
+            });
+            const avgVolatility = ranges.reduce((s, r) => s + r, 0) / ranges.length;
+
+            if (avgVolatility > 30) {
+              risks.push(`kline_high_volatility(${avgVolatility.toFixed(1)}%)`);
+              riskScore += 12;
+            } else if (avgVolatility > 15) {
+              risks.push(`kline_moderate_volatility(${avgVolatility.toFixed(1)}%)`);
+              riskScore += 5;
+            }
+
+            let redStreak = 0;
+            for (const c of candles.slice(0, 6)) {
+              if (Number(c.c) < Number(c.o)) redStreak++;
+              else break;
+            }
+            if (redStreak >= 4) {
+              risks.push(`kline_downtrend(${redStreak}_red_candles)`);
+              riskScore += 8;
+            }
+
+            const recentVol = candles.slice(0, 3).reduce((s, c) => s + Number(c.vol), 0);
+            if (recentVol < 100 && !isLargeCap) {
+              risks.push("kline_dead_volume");
+              riskScore += 8;
+            }
+          }
+        }
+      } catch { /* kline unavailable */ }
+    }
+
+    // --- Source I: Bundle analysis (suspicious bundled txs) ---
+    try {
+      const bundleResult = onchainosTrenches.tokenBundleInfo(tokenAddress);
+      if (bundleResult.success && bundleResult.data) {
+        const bundle = bundleResult.data as Record<string, string>;
+        const totalBundlers = Number(bundle.totalBundlers ?? 0);
+        if (totalBundlers > 5) {
+          risks.push(`bundled_launch(${totalBundlers}_bundlers)`);
+          riskScore += 20;
+        } else if (totalBundlers > 0) {
+          risks.push(`minor_bundling(${totalBundlers}_bundlers)`);
+          riskScore += 5;
+        }
+      }
+    } catch { /* bundle info unavailable */ }
 
     // --- Source G: Age & activity ---
     const holders = Number(priceData?.holders ?? advData?.totalHolders ?? 0);
