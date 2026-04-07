@@ -6,6 +6,7 @@ import {
   onchainosSwap,
 } from "../lib/onchainos.js";
 import { config } from "../config.js";
+import { settings } from "../settings.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +85,11 @@ export class ExecutorAgent extends BaseAgent {
         );
       case "portfolio":
         return this.getPortfolio();
+      case "preview":
+        return this.previewInvestment(
+          params.token as string,
+          params.amount as string | undefined,
+        );
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -259,6 +265,61 @@ export class ExecutorAgent extends BaseAgent {
         error: errorMsg,
       };
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Preview — dry-run investment analysis
+  // -------------------------------------------------------------------------
+
+  async previewInvestment(
+    tokenSymbol: string,
+    amount?: string,
+  ): Promise<Record<string, unknown>> {
+    const cfg = settings.get().invest;
+    const investAmount = amount ?? String(cfg.maxPerPosition);
+
+    const poolSearch = onchainosDefi.search(tokenSymbol, config.chainId, "DEX_POOL");
+    const pools: Array<Record<string, unknown>> = [];
+
+    if (poolSearch.success && poolSearch.data) {
+      const searchData = poolSearch.data as Record<string, unknown>;
+      const list = (searchData.list ?? searchData) as Array<Record<string, unknown>>;
+      if (Array.isArray(list)) {
+        for (const p of list) {
+          pools.push({
+            investmentId: p.investmentId,
+            name: p.name,
+            platform: p.platformName,
+            apr: p.rate,
+            tvl: p.tvl,
+          });
+        }
+      }
+    }
+
+    pools.sort((a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0));
+
+    let swapQuote: Record<string, unknown> | null = null;
+    try {
+      const quoteResult = onchainosSwap.quote(
+        config.contracts.usdt,
+        tokenSymbol,
+        investAmount,
+        config.chainId,
+      );
+      if (quoteResult.success && quoteResult.data) {
+        swapQuote = quoteResult.data as Record<string, unknown>;
+      }
+    } catch { /* quote unavailable */ }
+
+    return {
+      token: tokenSymbol,
+      amount: investAmount,
+      strategy: cfg.strategy,
+      pools,
+      bestPool: pools[0] ?? null,
+      swapQuote,
+    };
   }
 
   // -------------------------------------------------------------------------
