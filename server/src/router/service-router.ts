@@ -236,15 +236,17 @@ export function createServiceRouter(
         } catch { /* tracker unavailable */ }
       }
 
-      // Whale signals via signal list --wallet-type 3
-      try {
-        const result = await onchainosSignal.list(196, "3");
-        if (result.success && Array.isArray(result.data)) {
-          for (const s of result.data as Array<Record<string, unknown>>) {
-            signals.push({ ...s, tracker: "whale" });
+      // Signal list: smart_money (1), kol (2), whale (3)
+      for (const [wt, label] of [["1", "signal_smart_money"], ["2", "signal_kol"], ["3", "signal_whale"]] as const) {
+        try {
+          const result = await onchainosSignal.list(196, wt);
+          if (result.success && Array.isArray(result.data)) {
+            for (const s of result.data as Array<Record<string, unknown>>) {
+              signals.push({ ...s, tracker: label });
+            }
           }
-        }
-      } catch { /* */ }
+        } catch { /* */ }
+      }
 
       res.json({ signals: signals.slice(0, limit) });
     } catch (error) {
