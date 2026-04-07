@@ -1,61 +1,26 @@
 @import "tailwindcss";
 
-:root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --surface: #18181b;
-  --border: #27272a;
-  --text-secondary: #a1a1aa;
-  --text-tertiary: #71717a;
-  --safe: #34d399;
-  --caution: #f59e0b;
-  --dangerous: #ef4444;
-  --accent: #8b5cf6;
-  --accent-hover: #a78bfa;
-  --live-pulse: #06b6d4;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: "Space Grotesk", sans-serif;
+  background: #09090b;
+  color: #fafafa;
 }
 
-/* Monospace for addresses/code */
-.font-mono {
-  font-family: "JetBrains Mono", monospace;
-}
-
-/* Scrollbar styling for the feed */
-.feed-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.feed-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.feed-scroll::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-/* Terminal line fade-in */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+/* Scrollbar */
+.feed-scroll::-webkit-scrollbar { width: 4px; }
+.feed-scroll::-webkit-scrollbar-track { background: transparent; }
+.feed-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
