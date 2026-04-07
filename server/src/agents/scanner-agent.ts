@@ -104,40 +104,47 @@ export class ScannerAgent extends BaseAgent {
       } catch { /* source unavailable */ }
     }
 
-    // Smart money signals
+    // Smart money tracker activities
     if (cfg.trackSmartMoney) {
       try {
         const result = await onchainosSignal.activities("smart_money", config.chainId);
-        if (result.success && Array.isArray(result.data)) {
-          for (const s of result.data as Array<Record<string, string>>) {
-            const addr = s.tokenAddress ?? s.token;
-            if (addr) add(addr, "smart_money", s.tokenSymbol);
+        if (result.success && result.data) {
+          const trades = (result.data as Record<string, unknown>).trades as Array<Record<string, string>> | undefined;
+          if (Array.isArray(trades)) {
+            for (const s of trades) {
+              const addr = s.tokenContractAddress ?? s.tokenAddress ?? s.token;
+              if (addr) add(addr, "tracker_smart_money", s.tokenSymbol);
+            }
           }
         }
       } catch { /* */ }
     }
 
-    // Whale signals
+    // Whale signals (wallet-type 3) + Smart money signals (wallet-type 1)
     if (cfg.trackWhales) {
-      try {
-        const result = await onchainosSignal.activities("whale", config.chainId);
-        if (result.success && Array.isArray(result.data)) {
-          for (const s of result.data as Array<Record<string, string>>) {
-            const addr = s.tokenAddress ?? s.token;
-            if (addr) add(addr, "whale", s.tokenSymbol);
+      for (const wt of ["1", "3"]) {
+        try {
+          const result = await onchainosSignal.list(config.chainId, wt);
+          if (result.success && Array.isArray(result.data)) {
+            for (const s of result.data as Array<Record<string, unknown>>) {
+              const tokenObj = s.token as Record<string, string> | undefined;
+              const addr = tokenObj?.tokenAddress ?? (s as Record<string, string>).tokenAddress;
+              const sym = tokenObj?.symbol ?? (s as Record<string, string>).tokenSymbol;
+              if (addr) add(addr, wt === "3" ? "whale" : "signal_smart_money", sym);
+            }
           }
-        }
-      } catch { /* */ }
+        } catch { /* */ }
+      }
     }
 
-    // Degen signals
-    if (cfg.trackDegen) {
+    // KOL signals (tracker type kol)
+    if (cfg.trackKol) {
       try {
-        const result = await onchainosSignal.activities("degen", config.chainId);
+        const result = await onchainosSignal.activities("kol", config.chainId);
         if (result.success && Array.isArray(result.data)) {
           for (const s of result.data as Array<Record<string, string>>) {
             const addr = s.tokenAddress ?? s.token;
-            if (addr) add(addr, "degen", s.tokenSymbol);
+            if (addr) add(addr, "kol", s.tokenSymbol);
           }
         }
       } catch { /* */ }

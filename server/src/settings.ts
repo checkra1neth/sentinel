@@ -7,7 +7,7 @@ export interface DiscoverSettings {
   sources: string[];
   trackWhales: boolean;
   trackSmartMoney: boolean;
-  trackDegen: boolean;
+  trackKol: boolean;
 }
 
 export interface AnalyzeSettings {
@@ -44,10 +44,10 @@ const DEFAULTS: Settings = {
   discover: {
     mode: "auto",
     interval: "*/5 * * * *",
-    sources: ["NEW", "MIGRATED", "TRENDING", "TOP_GAINERS"],
+    sources: ["NEW", "MIGRATING", "MIGRATED"],
     trackWhales: true,
     trackSmartMoney: true,
-    trackDegen: false,
+    trackKol: false,
   },
   analyze: {
     mode: "auto",

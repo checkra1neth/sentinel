@@ -224,7 +224,8 @@ export function createServiceRouter(
       const limit = Number(req.query.limit ?? 20);
       const signals: Array<Record<string, unknown>> = [];
 
-      for (const tracker of ["whale", "smart_money", "degen"]) {
+      // Tracker activities: smart_money, kol
+      for (const tracker of ["smart_money", "kol"]) {
         try {
           const result = await onchainosSignal.activities(tracker);
           if (result.success && Array.isArray(result.data)) {
@@ -234,6 +235,16 @@ export function createServiceRouter(
           }
         } catch { /* tracker unavailable */ }
       }
+
+      // Whale signals via signal list --wallet-type 3
+      try {
+        const result = await onchainosSignal.list(196, "3");
+        if (result.success && Array.isArray(result.data)) {
+          for (const s of result.data as Array<Record<string, unknown>>) {
+            signals.push({ ...s, tracker: "whale" });
+          }
+        }
+      } catch { /* */ }
 
       res.json({ signals: signals.slice(0, limit) });
     } catch (error) {

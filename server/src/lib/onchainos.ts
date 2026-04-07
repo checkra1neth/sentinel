@@ -136,8 +136,8 @@ export const onchainosSignal = {
   activities: (trackerType: string = "smart_money", chainId: number = 196): OnchainosResult<unknown> =>
     onchainos(`tracker activities --tracker-type ${trackerType} --chain ${chainId}`),
 
-  list: (chainId: number = 196): OnchainosResult<unknown> =>
-    onchainos(`signal list --chain ${chainId}`),
+  list: (chainId: number = 196, walletType?: string): OnchainosResult<unknown> =>
+    onchainos(`signal list --chain ${chainId}${walletType ? ` --wallet-type ${walletType}` : ""}`),
 };
 
 // ---------------------------------------------------------------------------

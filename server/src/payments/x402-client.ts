@@ -53,7 +53,10 @@ export class X402Client {
     try {
       response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Caller": "0x8Ce01CF638681e12AFfD10e2feb1E7E3C50b7509",
+        },
         body: JSON.stringify(params),
       });
     } catch (err) {
