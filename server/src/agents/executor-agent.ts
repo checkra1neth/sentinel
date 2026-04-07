@@ -23,6 +23,7 @@ export interface LpPosition {
   tvl: string;
   range: number;
   timestamp: number;
+  entryPrice?: number;
 }
 
 export interface InvestResult {
@@ -61,7 +62,7 @@ function riskScoreToRange(riskScore: number): number {
 // ---------------------------------------------------------------------------
 
 export class ExecutorAgent extends BaseAgent {
-  readonly lpPositions: LpPosition[] = [];
+  lpPositions: LpPosition[] = [];
   private readonly publicClient;
 
   constructor(wallet: AgenticWallet, reinvestConfig?: ReinvestConfig) {
@@ -90,6 +91,13 @@ export class ExecutorAgent extends BaseAgent {
           params.token as string,
           params.amount as string | undefined,
         );
+      case "exit":
+        return this.exitPosition(
+          params.investmentId as number,
+          params.ratio as string | undefined,
+        );
+      case "collect":
+        return this.collectFees();
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -320,6 +328,69 @@ export class ExecutorAgent extends BaseAgent {
       bestPool: pools[0] ?? null,
       swapQuote,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Exit — withdraw from LP position
+  // -------------------------------------------------------------------------
+
+  async exitPosition(
+    investmentId: number,
+    ratio: string = "1",
+  ): Promise<Record<string, unknown>> {
+    this.log(`Exiting position ${investmentId} (ratio: ${ratio})`);
+
+    const result = onchainosDefi.withdraw(investmentId, this.walletAddress, config.chainId, ratio);
+
+    if (result.success) {
+      if (ratio === "1") {
+        this.lpPositions = this.lpPositions.filter(
+          (p) => p.investmentId !== investmentId,
+        );
+      }
+
+      this.emit({
+        timestamp: Date.now(),
+        agent: this.name,
+        type: "invest",
+        message: `Exited position ${investmentId} (${Number(ratio) * 100}%)`,
+        details: { investmentId, ratio, data: result.data },
+      });
+
+      return { success: true, investmentId, ratio, data: result.data };
+    }
+
+    return { success: false, investmentId, error: "Withdraw failed" };
+  }
+
+  // -------------------------------------------------------------------------
+  // Collect — harvest LP fees and rewards
+  // -------------------------------------------------------------------------
+
+  async collectFees(): Promise<Record<string, unknown>> {
+    this.log("Collecting LP fees");
+
+    const results: Array<Record<string, unknown>> = [];
+
+    const collectResult = onchainosDefi.collect(this.walletAddress, config.chainId, "V3_FEE");
+    if (collectResult.success) {
+      results.push({ type: "V3_FEE", success: true, data: collectResult.data });
+    }
+
+    const rewardResult = onchainosDefi.collect(this.walletAddress, config.chainId, "REWARD_PLATFORM");
+    if (rewardResult.success) {
+      results.push({ type: "REWARD_PLATFORM", success: true, data: rewardResult.data });
+    }
+
+    this.emit({
+      timestamp: Date.now(),
+      agent: this.name,
+      type: "invest",
+      message: `Collected fees: ${results.length} reward types`,
+      details: { results },
+    });
+
+    return { success: true, collected: results };
   }
 
   // -------------------------------------------------------------------------
