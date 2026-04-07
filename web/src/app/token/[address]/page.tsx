@@ -62,7 +62,7 @@ export default function TokenProfilePage(): React.ReactNode {
         marketCap={verdict?.marketCap ?? pair?.marketCap}
         liquidityUsd={verdict?.liquidityUsd ?? pair?.liquidity?.usd}
         volume24h={verdict?.volume24H ?? pair?.volume?.h24}
-        holdersCount={holdersArr.length || verdict?.holders}
+        holdersCount={verdict?.holders || holdersArr.length || undefined}
         smartMoneyCount={smartMoneyCount || undefined}
       />
 
