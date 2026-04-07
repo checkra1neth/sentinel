@@ -194,6 +194,39 @@ export function createServiceRouter(
     },
   );
 
+  // ── Analyze ──
+
+  router.get("/analyze/:token", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.params;
+      const analyst = agents["2"];
+      if (!analyst) { res.status(503).json({ error: "Analyst not available" }); return; }
+
+      const cached = verdictStore.getByToken(token);
+      if (cached && !req.query.fresh) {
+        res.json({ verdict: cached, cached: true });
+        return;
+      }
+
+      const result = await analyst.execute("scan", { token });
+      res.json({ verdict: result, cached: false });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/analyze/:token/rescan", async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.params;
+      const analyst = agents["2"];
+      if (!analyst) { res.status(503).json({ error: "Analyst not available" }); return; }
+      const result = await analyst.execute("scan", { token });
+      res.json({ verdict: result });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
   // ── Settings ──
 
   router.get("/settings", (_req: Request, res: Response): void => {
