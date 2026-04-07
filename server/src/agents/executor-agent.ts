@@ -7,6 +7,7 @@ import {
 } from "../lib/onchainos.js";
 import { config } from "../config.js";
 import { settings } from "../settings.js";
+import { getQuote as getUniswapQuote } from "../lib/uniswap-trading.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -320,6 +321,26 @@ export class ExecutorAgent extends BaseAgent {
       }
     } catch { /* quote unavailable */ }
 
+    let uniswapQuote: Record<string, unknown> | null = null;
+    try {
+      const uniResult = await getUniswapQuote({
+        tokenIn: config.contracts.usdt,
+        tokenOut: tokenSymbol,
+        tokenInChainId: config.chainId,
+        tokenOutChainId: config.chainId,
+        amount: String(Number(investAmount) * 1e6),
+        type: "EXACT_INPUT",
+        swapper: this.walletAddress,
+      });
+      if (uniResult) {
+        uniswapQuote = {
+          amountOut: uniResult.amountDecimals,
+          route: uniResult.routeString,
+          gasPriceWei: uniResult.gasPriceWei,
+        };
+      }
+    } catch { /* Uniswap Trading API unavailable */ }
+
     return {
       token: tokenSymbol,
       amount: investAmount,
@@ -327,6 +348,7 @@ export class ExecutorAgent extends BaseAgent {
       pools,
       bestPool: pools[0] ?? null,
       swapQuote,
+      uniswapQuote,
     };
   }
 

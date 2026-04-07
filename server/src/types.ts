@@ -219,6 +219,17 @@ export interface Verdict {
   holders?: number;
   priceChange24H?: number;
   volume24H?: number;
+  dexScreener?: {
+    pairAddress: string;
+    priceUsd: string;
+    volume24h: number;
+    liquidity: number;
+    fdv: number;
+    pairCreatedAt: number;
+    url: string;
+  };
+  defiLlamaApy?: number;
+  uniswapRoute?: string;
 }
 
 export interface VerdictStats {

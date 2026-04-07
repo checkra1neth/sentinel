@@ -11,6 +11,9 @@ import {
 import { settings } from "../settings.js";
 import { okxTokenSecurity } from "../lib/okx-api.js";
 import { getPool, getPoolInfo } from "../lib/uniswap.js";
+import { getTokenPairs } from "../lib/dexscreener.js";
+import { getPoolApy } from "../lib/defillama.js";
+import { getQuote as getUniswapQuote } from "../lib/uniswap-trading.js";
 import { config } from "../config.js";
 import { verdictStore } from "../verdicts/verdict-store.js";
 import { publishVerdictOnChain } from "../contracts/verdict-registry.js";
@@ -444,6 +447,92 @@ export class AnalystAgent extends BaseAgent {
       }
     } catch { /* bundle info unavailable */ }
 
+    // --- Source J: DexScreener pool data ---
+    let dexScreenerData: Verdict["dexScreener"] | undefined;
+    try {
+      const dexPairs = await getTokenPairs("xlayer", tokenAddress);
+      if (dexPairs.length > 0) {
+        const best = dexPairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0];
+        dexScreenerData = {
+          pairAddress: best.pairAddress,
+          priceUsd: best.priceUsd,
+          volume24h: best.volume?.h24 ?? 0,
+          liquidity: best.liquidity?.usd ?? 0,
+          fdv: best.fdv ?? 0,
+          pairCreatedAt: best.pairCreatedAt ?? 0,
+          url: best.url ?? "",
+        };
+
+        if (best.pairCreatedAt) {
+          const ageMs = Date.now() - best.pairCreatedAt;
+          const ageDays = ageMs / (1000 * 60 * 60 * 24);
+          if (ageDays < 1) {
+            risks.push("very_new_token(<1d)");
+            riskScore += 25;
+          } else if (ageDays < 7) {
+            risks.push(`new_token_risk(${Math.floor(ageDays)}d)`);
+            riskScore += 15;
+          }
+        }
+
+        const vol24 = best.volume?.h24 ?? 0;
+        if (vol24 < 1000 && !isLargeCap) {
+          risks.push(`dex_low_volume($${Math.floor(vol24)})`);
+          riskScore += 10;
+        }
+
+        const dexLiq = best.liquidity?.usd ?? 0;
+        if (dexLiq < 10000 && !isLargeCap && !isStablecoin) {
+          risks.push(`dex_thin_liquidity($${Math.floor(dexLiq)})`);
+          riskScore += 12;
+        }
+
+        if (best.fdv > 0 && best.fdv < 50000 && !isStablecoin) {
+          risks.push(`micro_cap(fdv:$${Math.floor(best.fdv / 1000)}k)`);
+          riskScore += 8;
+        }
+
+        const dexChange = best.priceChange?.h24 ?? 0;
+        if (dexChange < -50) {
+          risks.push(`dex_crash(${dexChange.toFixed(0)}%)`);
+          riskScore += 10;
+        }
+      }
+    } catch { /* DexScreener unavailable */ }
+
+    // --- Source K: DefiLlama APY data ---
+    let defiLlamaApy: number | undefined;
+    try {
+      const llamaPool = await getPoolApy(tokenSymbol || String(symbol ?? ""), "X Layer");
+      if (llamaPool) {
+        defiLlamaApy = llamaPool.apy;
+        if (llamaPool.apy > 1000) {
+          risks.push(`suspicious_apy(${llamaPool.apy.toFixed(0)}%)`);
+          riskScore += 5;
+        }
+      }
+    } catch { /* DefiLlama unavailable */ }
+
+    // --- Source L: Uniswap Trading API route check ---
+    let uniswapRoute: string | undefined;
+    try {
+      const uniQuote = await getUniswapQuote({
+        tokenIn: config.contracts.usdt,
+        tokenOut: tokenAddress,
+        tokenInChainId: config.chainId,
+        tokenOutChainId: config.chainId,
+        amount: "1000000",
+        type: "EXACT_INPUT",
+        swapper: this.walletAddress,
+      });
+      if (uniQuote) {
+        uniswapRoute = uniQuote.routeString;
+      } else if (!isLargeCap && !isStablecoin) {
+        risks.push("no_uniswap_route");
+        riskScore += 20;
+      }
+    } catch { /* Trading API unavailable */ }
+
     // --- Source G: Age & activity ---
     const holders = Number(priceData?.holders ?? advData?.totalHolders ?? 0);
     if (holders > 0 && holders < 10) {
@@ -515,6 +604,9 @@ export class AnalystAgent extends BaseAgent {
       priceChange24H,
       volume24H: Number(priceData?.volume24H ?? 0),
       defiPool,
+      dexScreener: dexScreenerData,
+      defiLlamaApy,
+      uniswapRoute,
     };
 
     // 10. Store verdict
