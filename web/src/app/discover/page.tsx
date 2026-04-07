@@ -75,80 +75,94 @@ export default function DiscoverPage(): React.ReactNode {
   const mergedTokens = useMemo((): DiscoverToken[] => {
     const byAddr = new Map<string, DiscoverToken>();
 
-    for (const t of scannerTokens ?? []) {
-      const addr = String(t.token ?? t.address ?? t.tokenContractAddress ?? "").toLowerCase();
-      if (!addr) continue;
+    // 1. Verdicts FIRST — richest data (price, mcap, liq, risk, holders)
+    for (const v of verdicts ?? []) {
+      const addr = v.token.toLowerCase();
       byAddr.set(addr, {
         token: addr,
-        tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? ""),
-        tokenName: String(t.tokenName ?? t.name ?? ""),
+        tokenSymbol: v.tokenSymbol,
+        tokenName: v.tokenName,
+        priceUsd: v.priceUsd || undefined,
+        priceChange24h: v.priceChange24H ?? undefined,
+        marketCap: v.marketCap || undefined,
+        liquidityUsd: v.liquidityUsd || undefined,
+        volume24h: v.volume24H ?? undefined,
+        riskScore: v.riskScore,
+        verdict: v.verdict,
+        smartMoneyCount: (v as unknown as Record<string, unknown>).holderInsight
+          ? Number(((v as unknown as Record<string, unknown>).holderInsight as Record<string, unknown>)?.smartMoneyCount ?? 0) || undefined
+          : undefined,
+        source: "SCANNER",
+        timestamp: v.timestamp,
+      });
+    }
+
+    // 2. Whale/Smart Money/KOL signals — nested token object, have price + mcap
+    for (const s of whaleSignals ?? []) {
+      const tok = s.token as Record<string, unknown> | undefined;
+      const addr = String(tok?.tokenAddress ?? s.tokenContractAddress ?? s.address ?? "").toLowerCase();
+      if (!addr || addr === "undefined" || addr === "") continue;
+      const existing = byAddr.get(addr);
+      const ts = Number(s.timestamp ?? s.blockTimestamp ?? Date.now());
+      byAddr.set(addr, {
+        ...(existing ?? { token: addr, timestamp: ts }),
+        token: addr,
+        tokenSymbol: String(tok?.symbol ?? existing?.tokenSymbol ?? ""),
+        tokenName: String(tok?.name ?? existing?.tokenName ?? ""),
+        priceUsd: Number(s.price ?? existing?.priceUsd ?? 0) || undefined,
+        marketCap: Number(tok?.marketCapUsd ?? existing?.marketCap ?? 0) || undefined,
+        // Keep verdict data if already exists, only override source
+        riskScore: existing?.riskScore,
+        verdict: existing?.verdict,
+        priceChange24h: existing?.priceChange24h,
+        liquidityUsd: existing?.liquidityUsd,
+        volume24h: existing?.volume24h,
+        smartMoneyCount: existing?.smartMoneyCount,
+        source: mapSource(String(s.tracker ?? "")),
+        timestamp: ts,
+      });
+    }
+
+    // 3. Scanner feed — only ADD tokens not already present (no data to override)
+    for (const t of scannerTokens ?? []) {
+      const addr = String(t.token ?? t.address ?? t.tokenContractAddress ?? "").toLowerCase();
+      if (!addr || byAddr.has(addr)) continue;
+      const name = String(t.tokenSymbol ?? t.symbol ?? t.name ?? "");
+      byAddr.set(addr, {
+        token: addr,
+        tokenSymbol: name,
+        tokenName: String(t.tokenName ?? t.name ?? name),
         priceUsd: Number(t.priceUsd ?? t.price ?? 0) || undefined,
         marketCap: Number(t.marketCap ?? 0) || undefined,
         liquidityUsd: Number(t.liquidityUsd ?? t.liquidity ?? 0) || undefined,
-        volume24h: Number(t.volume24h ?? t.volume ?? 0) || undefined,
         source: "SCANNER",
         timestamp: Number(t.timestamp ?? Date.now()),
       });
     }
 
-    // Whale/Smart Money/KOL signals — token data is nested in s.token object
-    for (const s of whaleSignals ?? []) {
-      const tok = s.token as Record<string, unknown> | undefined;
-      const addr = String(tok?.tokenAddress ?? s.tokenContractAddress ?? s.address ?? "").toLowerCase();
-      if (!addr || addr === "undefined") continue;
-      const existing = byAddr.get(addr);
-      const ts = Number(s.timestamp ?? s.blockTimestamp ?? Date.now());
-      if (!existing || ts > existing.timestamp) {
-        byAddr.set(addr, {
-          ...(existing ?? {}),
-          token: addr,
-          tokenSymbol: String(tok?.symbol ?? s.tokenSymbol ?? existing?.tokenSymbol ?? ""),
-          tokenName: String(tok?.name ?? s.tokenName ?? existing?.tokenName ?? ""),
-          priceUsd: Number(s.price ?? s.priceUsd ?? existing?.priceUsd ?? 0) || undefined,
-          marketCap: Number(tok?.marketCapUsd ?? existing?.marketCap ?? 0) || undefined,
-          source: mapSource(String(s.tracker ?? "")),
-          timestamp: ts,
-        });
-      }
-    }
-
-    // Trending — filter to X Layer only (chainId "xlayer" or 196)
+    // 4. Trending — only X Layer, only new tokens
     for (const t of trending ?? []) {
       const chain = String(t.chainId ?? "");
       if (chain !== "xlayer" && chain !== "196") continue;
       const addr = String(t.tokenAddress ?? t.address ?? "").toLowerCase();
-      if (!addr) continue;
-      if (!byAddr.has(addr)) {
-        byAddr.set(addr, {
-          token: addr,
-          tokenSymbol: String(t.symbol ?? t.tokenSymbol ?? ""),
-          source: "TRENDING",
-          timestamp: Date.now(),
-        });
-      }
+      if (!addr || byAddr.has(addr)) continue;
+      byAddr.set(addr, {
+        token: addr,
+        tokenSymbol: String(t.symbol ?? t.tokenSymbol ?? ""),
+        source: "TRENDING",
+        timestamp: Date.now(),
+      });
     }
 
-    const verdictMap = new Map<string, NonNullable<typeof verdicts>[number]>();
-    for (const v of verdicts ?? []) {
-      verdictMap.set(v.token.toLowerCase(), v);
-    }
-
-    for (const [addr, token] of byAddr) {
-      const v = verdictMap.get(addr);
-      if (v) {
-        token.riskScore = v.riskScore;
-        token.verdict = v.verdict;
-        token.priceUsd = token.priceUsd ?? v.priceUsd;
-        token.marketCap = token.marketCap ?? v.marketCap;
-        token.liquidityUsd = token.liquidityUsd ?? v.liquidityUsd;
-        token.tokenSymbol = token.tokenSymbol || v.tokenSymbol;
-        token.tokenName = token.tokenName || v.tokenName;
-        token.priceChange24h = token.priceChange24h ?? v.priceChange24H;
-        token.volume24h = token.volume24h ?? v.volume24H;
-      }
-    }
-
-    return Array.from(byAddr.values());
+    // Sort: tokens with data first (have price or riskScore), empty scanner tokens last
+    const result = Array.from(byAddr.values());
+    result.sort((a, b) => {
+      const aHasData = a.priceUsd || a.riskScore != null ? 1 : 0;
+      const bHasData = b.priceUsd || b.riskScore != null ? 1 : 0;
+      if (aHasData !== bHasData) return bHasData - aHasData;
+      return b.timestamp - a.timestamp;
+    });
+    return result;
   }, [scannerTokens, whaleSignals, trending, verdicts]);
 
   const filtered = useMemo(

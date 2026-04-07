@@ -93,7 +93,7 @@ export function ScreenerTable({ tokens }: ScreenerTableProps): React.ReactNode {
             className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors cursor-pointer"
           >
             <td className="py-2">
-              <div className="font-medium text-[#fafafa]">{t.tokenSymbol ?? "???"}</div>
+              <div className="font-medium text-[#fafafa]">{t.tokenSymbol || t.tokenName || "???"}</div>
               <div className="text-[10px] text-[#52525b]">{truncAddr(t.token)}</div>
             </td>
             <td className="py-2 text-right text-[#fafafa]">{t.priceUsd ? formatUsd(t.priceUsd) : "—"}</td>
