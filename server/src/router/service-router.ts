@@ -38,7 +38,7 @@ export function createServiceRouter(
 
   router.get(
     "/verdicts/:token",
-    x402Middleware(2, "0.50"),
+    x402Middleware(2, "0.01"),
     async (req: Request, res: Response): Promise<void> => {
       try {
         const { token } = req.params;
@@ -62,7 +62,7 @@ export function createServiceRouter(
 
   router.post(
     "/scan/:token",
-    x402Middleware(2, "0.10"),
+    x402Middleware(2, "0.01"),
     async (req: Request, res: Response): Promise<void> => {
       try {
         const { token } = req.params;
@@ -163,7 +163,7 @@ export function createServiceRouter(
 
   router.post(
     "/services/:serviceId/:action",
-    x402Middleware(1, "10.00"),
+    x402Middleware(1, "0.01"),
     async (req: Request, res: Response): Promise<void> => {
       try {
         const { serviceId, action } = req.params;

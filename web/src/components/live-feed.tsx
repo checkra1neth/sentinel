@@ -133,9 +133,7 @@ export function LiveFeed(): React.ReactNode {
             className="h-1.5 w-1.5 rounded-full"
             style={{
               backgroundColor: connected ? "#06b6d4" : "#ef4444",
-              boxShadow: connected
-                ? "0 0 6px rgba(34, 211, 238, 0.4)"
-                : "none",
+              boxShadow: "none",
             }}
           />
           <span className="text-[11px] text-[#a1a1aa]/60">
@@ -145,7 +143,7 @@ export function LiveFeed(): React.ReactNode {
       </div>
 
       {/* Event list */}
-      <div className="max-h-80 overflow-y-auto feed-scroll rounded-md border border-[#27272a]/50">
+      <div className="max-h-80 overflow-y-auto feed-scroll rounded-lg border border-white/[0.06]">
         {events.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12">
             <Radar className="h-5 w-5 text-[#27272a] mb-2" />

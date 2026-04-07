@@ -6,7 +6,6 @@ import gsap from "gsap";
 import { VerdictRow } from "../../components/verdict-row";
 import { InlineStats } from "../../components/inline-stats";
 import { LiveFeed } from "../../components/live-feed";
-import { ScanPulse } from "../../components/scan-pulse";
 import { ScanInput } from "../../components/scan-input";
 import { AgentPanel } from "../../components/agent-panel";
 
@@ -49,7 +48,6 @@ export default function Home(): React.ReactNode {
   const [verdicts, setVerdicts] = useState<Verdict[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
 
-  const headerRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const scanInputRef = useRef<HTMLDivElement>(null);
   const agentPanelRef = useRef<HTMLDivElement>(null);
@@ -124,11 +122,7 @@ export default function Home(): React.ReactNode {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Payment": JSON.stringify({
-              signature: "0xsentinel",
-              payer: "0x0000000000000000000000000000000000000000",
-              serviceId: 2,
-            }),
+            "X-Caller": "0x8Ce01CF638681e12AFfD10e2feb1E7E3C50b7509",
           },
         });
         if (!res.ok) return;
@@ -153,15 +147,6 @@ export default function Home(): React.ReactNode {
       "(prefers-reduced-motion: reduce)",
     ).matches;
     if (prefersReducedMotion) return;
-
-    // Header fade in
-    if (headerRef.current) {
-      gsap.fromTo(
-        headerRef.current,
-        { opacity: 0, y: -10 },
-        { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
-      );
-    }
 
     // Stats row fade in
     if (statsRef.current) {
@@ -237,21 +222,13 @@ export default function Home(): React.ReactNode {
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
-      {/* Header - left aligned, compact */}
-      <div ref={headerRef} className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-sm font-semibold uppercase tracking-[0.25em] text-[#fafafa] mb-1">
-            SENTINEL
-          </h1>
-          <p className="text-xs text-[#a1a1aa]">
-            Autonomous Security Oracle
-          </p>
-        </div>
-        <ScanPulse />
+      {/* Scan input — top priority */}
+      <div ref={scanInputRef} className="mb-6">
+        <ScanInput onVerdictReceived={handleVerdictReceived} />
       </div>
 
-      {/* Inline stats row */}
-      <div ref={statsRef} className="mb-10">
+      {/* Stats cards */}
+      <div ref={statsRef} className="mb-6">
         <InlineStats
           totalScanned={stats?.totalScanned ?? 0}
           totalDangerous={stats?.totalDangerous ?? 0}
@@ -260,12 +237,7 @@ export default function Home(): React.ReactNode {
         />
       </div>
 
-      {/* Scan input */}
-      <div ref={scanInputRef}>
-        <ScanInput onVerdictReceived={handleVerdictReceived} />
-      </div>
-
-      {/* Agent panel */}
+      {/* Agent pipeline bar */}
       <div ref={agentPanelRef}>
         <AgentPanel />
       </div>
@@ -283,12 +255,12 @@ export default function Home(): React.ReactNode {
         </div>
 
         {verdicts.length === 0 ? (
-          <div className="py-16 text-center border border-[#27272a]/30 rounded-md">
-            <Shield className="h-8 w-8 text-[#27272a] mx-auto mb-4" />
-            <p className="text-sm text-[#a1a1aa]/60 mb-1">
+          <div className="py-20 text-center border border-white/[0.06] rounded-lg bg-[#111318]/50">
+            <Shield className="h-10 w-10 text-[#8b5cf6]/20 mx-auto mb-4" />
+            <p className="text-sm text-[#a1a1aa]/60 mb-1 font-medium">
               No verdicts yet
             </p>
-            <p className="text-xs text-[#a1a1aa]/30 max-w-sm mx-auto">
+            <p className="text-xs text-[#a1a1aa]/30 max-w-sm mx-auto leading-relaxed">
               Enter a token address above to scan, or wait for the autonomous
               scanner to discover tokens.
             </p>
@@ -296,7 +268,7 @@ export default function Home(): React.ReactNode {
         ) : (
           <div
             ref={feedRef}
-            className="rounded-md border border-[#27272a]/50 overflow-hidden"
+            className="rounded-lg border border-white/[0.06] overflow-hidden"
           >
             {verdicts.map((v, i) => (
               <VerdictRow

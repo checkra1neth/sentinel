@@ -22,8 +22,22 @@ declare global {
 // Middleware
 // ---------------------------------------------------------------------------
 
+const ADMIN_ADDRESSES: Set<string> = new Set([
+  "0x8Ce01CF638681e12AFfD10e2feb1E7E3C50b7509".toLowerCase(),
+]);
+
 export function x402Middleware(serviceId: number, priceUsdt: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Admin bypass — skip payment
+    const caller = (req.headers["x-caller"] as string | undefined)?.toLowerCase();
+    if (caller && ADMIN_ADDRESSES.has(caller)) {
+      req.paymentVerified = true;
+      req.paymentPayer = caller;
+      req.paymentAmount = "0";
+      next();
+      return;
+    }
+
     const paymentHeader = req.headers["x-payment"];
 
     // No payment header -> return 402 challenge

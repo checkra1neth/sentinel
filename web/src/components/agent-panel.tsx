@@ -28,7 +28,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 function truncateAddress(addr: string | undefined): string {
-  if (!addr) return "—";
+  if (!addr) return "--";
   if (addr.length < 12) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
@@ -68,52 +68,56 @@ export function AgentPanel(): React.ReactNode {
 
   return (
     <div className="mb-8">
-      <div className="flex items-center flex-wrap gap-x-6 gap-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 rounded-lg border border-white/[0.06] overflow-hidden">
         {agents.map((agent, i) => {
           const Icon = ROLE_ICONS[agent.role] ?? Radar;
           const color = ROLE_COLORS[agent.role] ?? "#a1a1aa";
-          const isActive =
-            agent.status === "active" || agent.status === "running";
+          const isActive = agent.status === "active" || agent.status === "running";
 
           return (
-            <div key={agent.id} className="flex items-center gap-x-6">
-              <div className="flex items-center gap-2">
-                <span className="shrink-0" style={{ color }}>
-                  <Icon className="h-3 w-3" />
-                </span>
-                <span
-                  className="text-[11px] font-semibold uppercase tracking-[0.15em]"
-                  style={{ color }}
-                >
-                  {agent.role}
-                </span>
-                <span className="text-[11px] font-mono text-[#a1a1aa]/60">
-                  {truncateAddress(agent.address)}
-                </span>
-                <span className="text-[11px] font-mono text-[#a1a1aa]/40">
-                  {agent.balance} USDT
-                </span>
-                <span className="relative flex h-1.5 w-1.5 shrink-0">
-                  {isActive && (
-                    <span
-                      className="absolute inline-flex h-full w-full rounded-full opacity-50 animate-ping"
-                      style={{ backgroundColor: color }}
-                    />
-                  )}
-                  <span
-                    className="relative inline-flex h-1.5 w-1.5 rounded-full"
-                    style={{
-                      backgroundColor: isActive ? color : "#a1a1aa",
-                    }}
-                  />
-                </span>
-              </div>
+            <div
+              key={agent.id}
+              className="flex items-center gap-3 px-4 py-3 relative"
+              style={{
+                background: `linear-gradient(90deg, ${color}08 0%, transparent 100%)`,
+                borderLeft: i === 0 ? "none" : undefined,
+              }}
+            >
 
-              {/* Separator dot */}
+              <Icon className="h-4 w-4 shrink-0" style={{ color }} />
+
+              <span
+                className="text-[11px] font-bold uppercase tracking-[0.12em] shrink-0"
+                style={{ color }}
+              >
+                {agent.role}
+              </span>
+
+              <span className="text-[11px] font-mono text-[#a1a1aa]/50 flex-1 truncate">
+                {truncateAddress(agent.address)}
+              </span>
+
+              {/* Status dot */}
+              <span className="relative flex h-2 w-2 shrink-0">
+                {isActive && (
+                  <span
+                    className="absolute inline-flex h-full w-full rounded-full opacity-40 animate-ping"
+                    style={{ backgroundColor: color }}
+                  />
+                )}
+                <span
+                  className="relative inline-flex h-2 w-2 rounded-full"
+                  style={{ backgroundColor: isActive ? color : "#a1a1aa" }}
+                />
+              </span>
+
+              {/* Arrow separator between agents */}
               {i < agents.length - 1 && (
-                <span className="text-[#27272a] select-none hidden sm:inline">
-                  /
-                </span>
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 hidden sm:flex items-center justify-center w-5 h-5 rounded-full bg-[#09090b] border border-white/[0.06]">
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                    <path d="M2 1L5 4L2 7" stroke="#a1a1aa" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
+                  </svg>
+                </div>
               )}
             </div>
           );

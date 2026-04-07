@@ -139,7 +139,7 @@ export const VerdictRow = forwardRef<
       {/* Main row */}
       <div
         className="flex items-center gap-3 py-3 px-4 cursor-pointer transition-colors hover:bg-[#18181b]/80"
-        style={{ borderLeft: `3px solid ${color}` }}
+        style={{ background: bgColor }}
         onClick={() => setExpanded((prev) => !prev)}
       >
         {/* Severity badge */}
@@ -215,7 +215,7 @@ export const VerdictRow = forwardRef<
       >
         <div
           className="px-4 pb-3 pt-1.5 space-y-2"
-          style={{ borderLeft: `3px solid ${color}`, marginLeft: 0 }}
+          style={{ background: bgColor }}
         >
           {/* Row 1: all market stats inline */}
           <div className="flex items-baseline gap-x-5 gap-y-1 flex-wrap text-xs">

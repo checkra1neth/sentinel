@@ -23,11 +23,7 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Payment": JSON.stringify({
-            signature: "0xsentinel",
-            payer: "0x0000000000000000000000000000000000000000",
-            serviceId: 2,
-          }),
+          "X-Caller": "0x8Ce01CF638681e12AFfD10e2feb1E7E3C50b7509",
         },
       });
       if (!res.ok) throw new Error(`Scan failed: ${res.status}`);
@@ -71,7 +67,7 @@ export function ScanInput({ onVerdictReceived }: ScanInputProps): React.ReactNod
           onClick={handleScan}
           disabled={!address || loading}
           className="shrink-0 flex items-center gap-2 rounded-md bg-[#8b5cf6] px-4 py-1.5 text-sm font-medium text-white
-                     hover:bg-[#7c3aed] hover:shadow-[0_0_12px_rgba(139,92,246,0.3)] disabled:opacity-40
+                     hover:bg-[#7c3aed] hover:shadow-[0_6px_16px_-4px_rgba(0,0,0,0.5),_0_2px_4px_-1px_rgba(0,0,0,0.3)] disabled:opacity-40
                      disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           {loading ? (

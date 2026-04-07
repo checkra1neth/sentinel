@@ -26,7 +26,7 @@ const server = http.createServer(app);
 
 app.use((_req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Content-Type, X-Payment");
+  res.header("Access-Control-Allow-Headers", "Content-Type, X-Payment, X-Caller");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (_req.method === "OPTIONS") {
     res.sendStatus(200);
