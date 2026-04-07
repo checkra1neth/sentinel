@@ -20,10 +20,7 @@ export class AgenticWallet {
   /** Switch onchainos CLI context to this wallet's account. */
   private async activate(): Promise<void> {
     if (!this.accountId) return;
-    const idx = Number(this.accountId);
-    if (!Number.isNaN(idx)) {
-      onchainosWallet.switchAccount(idx);
-    }
+    onchainosWallet.switchAccount(this.accountId);
   }
 
   /** Get native or token balance on X Layer. */
@@ -45,21 +42,21 @@ export class AgenticWallet {
   /** Send native or ERC-20 tokens. */
   async send(amount: string, to: Address, tokenAddress?: string): Promise<boolean> {
     await this.activate();
-    const result = onchainosWallet.send(to, amount, tokenAddress);
+    const result = onchainosWallet.send(to, amount, config.chainId, tokenAddress);
     return result.success;
   }
 
   /** Execute an arbitrary contract call via onchainos CLI. */
   async contractCall(to: Address, inputData: string, value?: string): Promise<boolean> {
     await this.activate();
-    const result = onchainosWallet.contractCall(to, inputData, value);
+    const result = onchainosWallet.contractCall(to, config.chainId, inputData, value);
     return result.success;
   }
 
   /** Sign an arbitrary message. */
   async signMessage(message: string): Promise<string | null> {
     await this.activate();
-    const result = onchainosWallet.signMessage(message);
+    const result = onchainosWallet.signMessage(config.chainId, this.address, message);
     if (!result.success) return null;
     const data = result.data as Record<string, unknown>;
     return String(data.signature ?? data);
@@ -73,7 +70,7 @@ export class AgenticWallet {
   ): Promise<{ signature: string; authorization: Record<string, string> } | null> {
     await this.activate();
     const network = `eip155:${config.chainId}`;
-    const result = onchainosPayment.x402Pay(payTo, network, amount);
+    const result = onchainosPayment.x402Pay(network, amount, payTo, asset);
     if (!result.success) return null;
 
     const data = result.data as Record<string, unknown>;

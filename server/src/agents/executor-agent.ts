@@ -141,14 +141,38 @@ export class ExecutorAgent extends BaseAgent {
 
           this.log(`Found pool: ${poolName} on ${platformName} (APR ${(Number(apr) * 100).toFixed(1)}%, TVL $${Number(tvl).toLocaleString()})`);
 
-          // 2. Invest via DeFi skill with risk-based range
-          const investResult = onchainosDefi.invest(
+          // 2. Get pool preparation info (accepted tokens, ticks)
+          const prepResult = onchainosDefi.prepare(investmentId);
+          const prepData = prepResult.success ? prepResult.data as Record<string, unknown> : null;
+
+          // Build user-input JSON from pool's investWithTokenList
+          const tokenList = (prepData?.investWithTokenList ?? []) as Array<Record<string, string>>;
+          const inputToken = tokenList.find((t) => t.tokenAddress?.toLowerCase() === config.contracts.usdt.toLowerCase()) ?? tokenList[0];
+          const tokenPrecision = inputToken?.tokenPrecision ?? "6";
+          const coinAmount = String(Math.floor(Number(investAmount) * Math.pow(10, Number(tokenPrecision))));
+
+          const userInput = JSON.stringify([{
+            tokenAddress: inputToken?.tokenAddress ?? config.contracts.usdt,
+            chainIndex: String(config.chainId),
+            coinAmount,
+            tokenPrecision,
+          }]);
+
+          // Calculate tick range based on risk
+          const currentTick = Number(prepData?.currentTick ?? 0);
+          const tickSpacing = Number(prepData?.tickSpacing ?? 60);
+          const tickRange = Math.max(Math.round((range / 100) * 10000 / tickSpacing) * tickSpacing, tickSpacing);
+          const tickLower = currentTick - tickRange;
+          const tickUpper = currentTick + tickRange;
+
+          // 3. Deposit via DeFi skill
+          const investResult = onchainosDefi.deposit(
             investmentId,
             this.walletAddress,
-            config.contracts.usdt,
-            investAmount,
-            config.chainId,
-            range,
+            userInput,
+            "0.01",
+            tickLower,
+            tickUpper,
           );
 
           if (investResult.success) {
@@ -362,7 +386,7 @@ export class ExecutorAgent extends BaseAgent {
   ): Promise<Record<string, unknown>> {
     this.log(`Exiting position ${investmentId} (ratio: ${ratio})`);
 
-    const result = onchainosDefi.withdraw(investmentId, this.walletAddress, config.chainId, ratio);
+    const result = onchainosDefi.redeem(investmentId, this.walletAddress, ratio, config.chainId);
 
     if (result.success) {
       if (ratio === "1") {
@@ -394,12 +418,12 @@ export class ExecutorAgent extends BaseAgent {
 
     const results: Array<Record<string, unknown>> = [];
 
-    const collectResult = onchainosDefi.collect(this.walletAddress, config.chainId, "V3_FEE");
+    const collectResult = onchainosDefi.claim(this.walletAddress, "V3_FEE", config.chainId);
     if (collectResult.success) {
       results.push({ type: "V3_FEE", success: true, data: collectResult.data });
     }
 
-    const rewardResult = onchainosDefi.collect(this.walletAddress, config.chainId, "REWARD_PLATFORM");
+    const rewardResult = onchainosDefi.claim(this.walletAddress, "REWARD_PLATFORM", config.chainId);
     if (rewardResult.success) {
       results.push({ type: "REWARD_PLATFORM", success: true, data: rewardResult.data });
     }

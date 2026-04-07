@@ -3,7 +3,10 @@ import { config } from "../config.js";
 const API_URL = config.uniswap.tradingApiUrl;
 
 function headers(): Record<string, string> {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
+  const h: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-universal-router-version": "2.0",
+  };
   if (config.uniswap.apiKey) h["x-api-key"] = config.uniswap.apiKey;
   return h;
 }
@@ -22,6 +25,7 @@ export interface UniswapQuote {
 }
 
 export interface UniswapSwapCalldata {
+  from: string;
   to: string;
   data: string;
   value: string;
@@ -60,15 +64,15 @@ export async function getQuote(params: {
 }): Promise<UniswapQuote | null> {
   try {
     const body = {
-      tokenInChainId: params.tokenInChainId,
-      tokenOutChainId: params.tokenOutChainId,
+      tokenInChainId: String(params.tokenInChainId),
+      tokenOutChainId: String(params.tokenOutChainId),
       tokenIn: params.tokenIn,
       tokenOut: params.tokenOut,
       amount: params.amount,
       type: params.type,
       swapper: params.swapper,
       slippageTolerance: params.slippageTolerance,
-      configs: [{ routingType: "CLASSIC", protocols: ["V2", "V3"] }],
+      configs: [{ routingType: "CLASSIC", protocols: ["V2", "V3", "V4"] }],
     };
 
     const res = await fetch(`${API_URL}/quote`, {
@@ -100,10 +104,15 @@ export async function getQuote(params: {
 
 export async function getSwapCalldata(quote: UniswapQuote): Promise<UniswapSwapCalldata | null> {
   try {
+    // Strip permitData/permitTransaction — must NOT go to /swap endpoint
+    const raw = { ...(quote.raw as Record<string, unknown>) };
+    delete raw.permitData;
+    delete raw.permitTransaction;
+
     const res = await fetch(`${API_URL}/swap`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ quote: quote.raw, simulateTransaction: false }),
+      body: JSON.stringify({ ...raw, simulateTransaction: false }),
     });
 
     if (!res.ok) return null;
@@ -111,6 +120,7 @@ export async function getSwapCalldata(quote: UniswapQuote): Promise<UniswapSwapC
     const swap = (data.swap ?? data) as Record<string, unknown>;
 
     return {
+      from: String(swap.from ?? ""),
       to: String(swap.to ?? ""),
       data: String(swap.data ?? ""),
       value: String(swap.value ?? "0"),

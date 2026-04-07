@@ -48,10 +48,10 @@ export function TabHolders({ address }: { address: string }): React.ReactNode {
           {holders.map((h, i) => (
             <tr key={i} className="border-b border-white/[0.03]">
               <td className="py-1.5 text-[#52525b]">{i + 1}</td>
-              <td className="py-1.5 text-[#52525b]">{truncAddr(String(h.holderAddress ?? h.address ?? ""))}</td>
+              <td className="py-1.5 text-[#52525b]">{truncAddr(String(h.holderWalletAddress ?? h.holderAddress ?? h.address ?? ""))}</td>
               <td className="py-1.5"><span className={`inline-block px-1 py-px rounded text-[9px] font-medium ${TAG_STYLE[String(h.tag ?? "")] ?? "text-[#52525b] bg-white/[0.04]"}`}>{tagLabel(String(h.tag ?? ""))}</span></td>
-              <td className="py-1.5 text-right text-[#a1a1aa]">{String(h.amount ?? h.balance ?? "—")}</td>
-              <td className="py-1.5 text-right text-[#a1a1aa]">{String(h.valuePercent ?? h.percent ?? "—")}</td>
+              <td className="py-1.5 text-right text-[#a1a1aa]">{String(h.holdAmount ?? h.amount ?? h.balance ?? "—")}</td>
+              <td className="py-1.5 text-right text-[#a1a1aa]">{String(h.holdPercent ?? h.valuePercent ?? h.percent ?? "—")}</td>
             </tr>
           ))}
           {holders.length === 0 && <tr><td colSpan={5} className="py-4 text-[#52525b]">No holder data available.</td></tr>}

@@ -120,16 +120,26 @@ export function startReinvestScheduler(
             const bestPool = Array.isArray(pools) && pools.length > 0
               ? [...pools].sort((a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0))[0]
               : null;
-            const investResult = bestPool
-              ? onchainosDefi.invest(
-                  Number(bestPool.investmentId),
-                  agent.walletAddress,
-                  config.contracts.usdt,
-                  halfAmount,
-                  config.chainId,
-                  10,
-                )
-              : { success: false, data: null, error: "No pool found" };
+            let investResult: { success: boolean; data: unknown; error?: string } = { success: false, data: null, error: "No pool found" };
+            if (bestPool) {
+              const prepResult = onchainosDefi.prepare(Number(bestPool.investmentId));
+              const prepData = prepResult.success ? prepResult.data as Record<string, unknown> : null;
+              const tokenList = (prepData?.investWithTokenList ?? []) as Array<Record<string, string>>;
+              const inputToken = tokenList[0];
+              const precision = inputToken?.tokenPrecision ?? "6";
+              const coinAmt = String(Math.floor(Number(halfAmount) * Math.pow(10, Number(precision))));
+              const userInput = JSON.stringify([{
+                tokenAddress: inputToken?.tokenAddress ?? config.contracts.usdt,
+                chainIndex: String(config.chainId),
+                coinAmount: coinAmt,
+                tokenPrecision: precision,
+              }]);
+              investResult = onchainosDefi.deposit(
+                Number(bestPool.investmentId),
+                agent.walletAddress,
+                userInput,
+              );
+            }
 
             if (investResult.success) {
               emit(agent.name, "reinvest", `LP investment succeeded for ${agent.name}`, {

@@ -230,6 +230,24 @@ export interface Verdict {
   };
   defiLlamaApy?: number;
   uniswapRoute?: string;
+  clusterOverview?: {
+    clusterConcentration: string;
+    rugPullPercent: number;
+    newAddressPercent: number;
+    sameFundPercent: number;
+  };
+  holderInsight?: {
+    smartMoneyCount: number;
+    whaleCount: number;
+    kolCount: number;
+  };
+  topTraderAvgPnl?: number;
+  devInfo?: {
+    totalTokens: number;
+    rugPullCount: number;
+    migratedCount: number;
+    goldenGemCount: number;
+  };
 }
 
 export interface VerdictStats {

@@ -48,10 +48,10 @@ export function TabTraders({ address }: { address: string }): React.ReactNode {
           </thead>
           <tbody>
             {traders.map((t, i) => {
-              const pnl = Number(t.pnl ?? t.profit ?? 0);
+              const pnl = Number(t.realizedPnlUsd ?? t.pnl ?? t.profit ?? 0);
               return (
                 <tr key={i} className="border-b border-white/[0.03]">
-                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.traderAddress ?? t.address ?? ""))}</td>
+                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? t.traderAddress ?? t.address ?? ""))}</td>
                   <td className="py-1.5"><span className={`inline-block px-1 py-px rounded text-[9px] font-medium ${TAG_STYLE[String(t.tag ?? "")] ?? "text-[#52525b] bg-white/[0.04]"}`}>{tagLabel(String(t.tag ?? ""))}</span></td>
                   <td className={`py-1.5 text-right ${pnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString()}</td>
                   <td className="py-1.5 text-right text-[#a1a1aa] hidden sm:table-cell">{String(t.buyVolume ?? "—")}</td>
@@ -82,7 +82,7 @@ export function TabTraders({ address }: { address: string }): React.ReactNode {
               return (
                 <tr key={i} className="border-b border-white/[0.03]">
                   <td className={`py-1.5 ${isBuy ? "text-[#34d399]" : "text-[#ef4444]"}`}>{isBuy ? "BUY" : "SELL"}</td>
-                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.traderAddress ?? t.address ?? ""))}</td>
+                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? t.traderAddress ?? t.address ?? ""))}</td>
                   <td className="py-1.5 text-right text-[#a1a1aa]">{t.amount ? formatUsd(Number(t.amount)) : "—"}</td>
                   <td className="py-1.5 text-right text-[#a1a1aa] hidden sm:table-cell">{t.price ? formatUsd(Number(t.price)) : "—"}</td>
                   <td className="py-1.5 text-right text-[#52525b]">{t.timestamp ? timeAgo(Number(t.timestamp)) : "—"}</td>

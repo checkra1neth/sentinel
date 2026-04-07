@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel — Discover</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#09090b;
+    color:#fafafa;
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono { font-family:'JetBrains Mono',monospace; }
+
+  /* Nav — sticky top */
+  .nav {
+    position:sticky; top:0; z-index:50;
+    background:rgba(9,9,11,0.8);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    height:48px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 24px;
+    max-width:1400px; margin:0 auto;
+  }
+  .nav-brand { font-size:14px; font-weight:600; letter-spacing:0.5px; }
+  .nav-links { display:flex; gap:4px; }
+  .nav-link {
+    padding:4px 12px; font-size:12px; font-weight:500;
+    color:#a1a1aa; text-decoration:none; border-radius:4px;
+    transition:color 0.15s;
+  }
+  .nav-link:hover { color:#fafafa; }
+  .nav-link.active { color:#fafafa; background:rgba(255,255,255,0.06); }
+  .nav-wallet { font-size:11px; color:#52525b; font-family:'JetBrains Mono',monospace; }
+
+  .container { max-width:1400px; margin:0 auto; padding:0 24px; }
+
+  /* Live signal bar */
+  .signal-bar {
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    padding:6px 0;
+    font-size:11px;
+    font-family:'JetBrains Mono',monospace;
+    color:#52525b;
+    overflow:hidden;
+    white-space:nowrap;
+    display:flex; align-items:center; gap:6px;
+  }
+  .signal-dot {
+    width:5px; height:5px; border-radius:50%; background:#34d399;
+    display:inline-block; flex-shrink:0;
+  }
+  .signal-label { color:#a1a1aa; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-right:8px; }
+
+  /* Filters */
+  .filters {
+    padding:12px 0;
+    display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+  }
+  .filter-btn {
+    padding:4px 10px;
+    font-size:11px; font-weight:500;
+    color:#52525b;
+    border:1px solid rgba(255,255,255,0.06);
+    border-radius:4px;
+    background:transparent;
+    cursor:pointer;
+    transition:all 0.15s;
+  }
+  .filter-btn:hover { color:#a1a1aa; border-color:rgba(255,255,255,0.1); }
+  .filter-btn.active { color:#fafafa; background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); }
+  .filter-search {
+    margin-left:auto;
+    padding:4px 10px;
+    font-size:11px;
+    font-family:'JetBrains Mono',monospace;
+    color:#fafafa;
+    border:1px solid rgba(255,255,255,0.06);
+    border-radius:4px;
+    background:transparent;
+    outline:none;
+    width:150px;
+  }
+  .filter-search::placeholder { color:#52525b; }
+  .filter-search:focus { border-color:rgba(6,182,212,0.4); }
+
+  /* Table */
+  table { width:100%; border-collapse:collapse; }
+  th {
+    padding:8px 0;
+    font-size:10px; font-weight:500;
+    color:#52525b;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    text-align:left;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+  }
+  th.r { text-align:right; }
+  th.c { text-align:center; }
+  td { padding:8px 0; font-size:12px; }
+  td.mono { font-family:'JetBrains Mono',monospace; }
+  td.r { text-align:right; }
+  td.c { text-align:center; }
+  td.muted { color:#a1a1aa; }
+  td.dim { color:#52525b; }
+  tr.row {
+    border-bottom:1px solid rgba(255,255,255,0.03);
+    cursor:pointer;
+    transition:background 0.1s;
+  }
+  tr.row:hover { background:rgba(255,255,255,0.02); }
+
+  /* Token cell */
+  .token-cell { display:flex; align-items:center; gap:8px; }
+  .token-sym { font-weight:500; color:#fafafa; }
+  .token-addr { font-size:10px; color:#52525b; font-family:'JetBrains Mono',monospace; }
+
+  /* Badges */
+  .risk { padding:1px 6px; border-radius:3px; font-size:10px; font-weight:500; font-family:'JetBrains Mono',monospace; }
+  .risk-safe { color:#34d399; background:rgba(52,211,153,0.08); }
+  .risk-caution { color:#f59e0b; background:rgba(245,158,11,0.08); }
+  .risk-danger { color:#ef4444; background:rgba(239,68,68,0.08); }
+
+  .source { font-size:9px; font-weight:500; text-transform:uppercase; letter-spacing:0.3px; font-family:'JetBrains Mono',monospace; }
+  .src-whale { color:#34d399; }
+  .src-smart { color:#a78bfa; }
+  .src-trending { color:#f59e0b; }
+  .src-scanner { color:#06b6d4; }
+  .src-kol { color:#f59e0b; }
+
+  .green { color:#34d399; }
+  .red { color:#ef4444; }
+  .cyan { color:#06b6d4; }
+
+  /* Leaderboard */
+  .section-header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:16px 0 8px;
+    border-top:1px solid rgba(255,255,255,0.06);
+    margin-top:16px;
+  }
+  .section-title { font-size:10px; font-weight:500; color:#52525b; text-transform:uppercase; letter-spacing:0.5px; }
+  .section-link { font-size:10px; color:#a1a1aa; text-decoration:none; cursor:pointer; }
+  .section-link:hover { color:#fafafa; }
+
+  .leaders { display:flex; gap:0; font-family:'JetBrains Mono',monospace; }
+  .leader {
+    flex:1; padding:8px 0;
+    border-right:1px solid rgba(255,255,255,0.04);
+    font-size:11px;
+  }
+  .leader:last-child { border-right:none; }
+  .leader-addr { color:#52525b; font-size:10px; }
+  .leader-pnl { color:#34d399; font-weight:500; }
+  .leader-meta { color:#52525b; font-size:9px; margin-top:2px; }
+
+  /* Responsive */
+  @media (max-width:768px) {
+    .hide-md { display:none; }
+  }
+  @media (max-width:640px) {
+    .hide-sm { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<div style="border-bottom:1px solid rgba(255,255,255,0.06);">
+  <div class="nav">
+    <span class="nav-brand">SENTINEL</span>
+    <div class="nav-links">
+      <a class="nav-link active" href="#">Discover</a>
+      <a class="nav-link" href="#">Analyze</a>
+      <a class="nav-link" href="#">Portfolio</a>
+      <a class="nav-link" href="#">Agents</a>
+    </div>
+    <span class="nav-wallet">0x7500...ee00</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Live signal bar -->
+  <div class="signal-bar">
+    <span class="signal-dot"></span>
+    <span class="signal-label">live</span>
+    <span><span class="green">whale bought</span> <span style="color:#fafafa">MEME</span> $42.1K &mdash; 2m</span>
+    <span style="margin:0 12px; color:rgba(255,255,255,0.06);">|</span>
+    <span><span style="color:#a78bfa">smart money sold</span> <span style="color:#fafafa">PEPE2</span> $18.3K &mdash; 5m</span>
+    <span style="margin:0 12px; color:rgba(255,255,255,0.06);">|</span>
+    <span><span style="color:#f59e0b">kol bought</span> <span style="color:#fafafa">OKX</span> $8.7K &mdash; 8m</span>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <button class="filter-btn active">All</button>
+    <button class="filter-btn">Whale</button>
+    <button class="filter-btn">Smart Money</button>
+    <button class="filter-btn">Trending</button>
+    <button class="filter-btn">Scanner</button>
+    <button class="filter-btn">KOL</button>
+    <input class="filter-search" type="text" placeholder="Search token...">
+  </div>
+
+  <!-- Screener table -->
+  <table>
+    <thead>
+      <tr>
+        <th>Token</th>
+        <th class="r">Price</th>
+        <th class="r">24h</th>
+        <th class="r hide-md">MCap</th>
+        <th class="r hide-md">Liquidity</th>
+        <th class="r hide-sm">Volume</th>
+        <th class="r">Risk</th>
+        <th class="c hide-sm">Smart $</th>
+        <th>Source</th>
+        <th class="r">Age</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="row">
+        <td>
+          <div class="token-cell">
+            <div><span class="token-sym">MEME</span><br><span class="token-addr">0x1a2b...3c4d</span></div>
+          </div>
+        </td>
+        <td class="r mono">$0.0234</td>
+        <td class="r mono green">+18.4%</td>
+        <td class="r mono muted hide-md">$4.2M</td>
+        <td class="r mono muted hide-md">$1.1M</td>
+        <td class="r mono muted hide-sm">$2.3M</td>
+        <td class="r"><span class="risk risk-safe">25</span></td>
+        <td class="c mono cyan hide-sm">3</td>
+        <td><span class="source src-whale">whale</span></td>
+        <td class="r dim mono" style="font-size:11px;">2m</td>
+      </tr>
+
+      <tr class="row">
+        <td>
+          <div class="token-cell">
+            <div><span class="token-sym">PEPE2</span><br><span class="token-addr">0x5e6f...7g8h</span></div>
+          </div>
+        </td>
+        <td class="r mono">$0.00012</td>
+        <td class="r mono red">-5.2%</td>
+        <td class="r mono muted hide-md">$820K</td>
+        <td class="r mono muted hide-md">$210K</td>
+        <td class="r mono muted hide-sm">$450K</td>
+        <td class="r"><span class="risk risk-caution">52</span></td>
+        <td class="c mono cyan hide-sm">1</td>
+        <td><span class="source src-smart">smart $</span></td>
+        <td class="r dim mono" style="font-size:11px;">8m</td>
+      </tr>
+
+      <tr class="row">
+        <td>
+          <div class="token-cell">
+            <div><span class="token-sym">RUGME</span><br><span class="token-addr">0x9a0b...1c2d</span></div>
+          </div>
+        </td>
+        <td class="r mono">$0.000003</td>
+        <td class="r mono green">+340%</td>
+        <td class="r mono muted hide-md">$45K</td>
+        <td class="r mono muted hide-md">$8K</td>
+        <td class="r mono muted hide-sm">$120K</td>
+        <td class="r"><span class="risk risk-danger">89</span></td>
+        <td class="c mono dim hide-sm">0</td>
+        <td><span class="source src-scanner">scanner</span></td>
+        <td class="r dim mono" style="font-size:11px;">15m</td>
+      </tr>
+
+      <tr class="row">
+        <td>
+          <div class="token-cell">
+            <div><span class="token-sym">OKB</span><br><span class="token-addr">0xeeee...eeee</span></div>
+          </div>
+        </td>
+        <td class="r mono">$52.30</td>
+        <td class="r mono green">+2.1%</td>
+        <td class="r mono muted hide-md">$3.1B</td>
+        <td class="r mono muted hide-md">$48M</td>
+        <td class="r mono muted hide-sm">$12M</td>
+        <td class="r"><span class="risk risk-safe">8</span></td>
+        <td class="c mono cyan hide-sm">12</td>
+        <td><span class="source src-trending">trending</span></td>
+        <td class="r dim mono" style="font-size:11px;">1h</td>
+      </tr>
+
+      <tr class="row">
+        <td>
+          <div class="token-cell">
+            <div><span class="token-sym">XLMEME</span><br><span class="token-addr">0x3d4e...5f6g</span></div>
+          </div>
+        </td>
+        <td class="r mono">$0.0089</td>
+        <td class="r mono green">+67.3%</td>
+        <td class="r mono muted hide-md">$1.8M</td>
+        <td class="r mono muted hide-md">$340K</td>
+        <td class="r mono muted hide-sm">$890K</td>
+        <td class="r"><span class="risk risk-safe">31</span></td>
+        <td class="c mono cyan hide-sm">5</td>
+        <td><span class="source src-kol">kol</span></td>
+        <td class="r dim mono" style="font-size:11px;">22m</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Leaderboard -->
+  <div class="section-header">
+    <span class="section-title">Top Traders &mdash; 7d</span>
+    <a class="section-link" href="#">View all &rarr;</a>
+  </div>
+  <div class="leaders">
+    <div class="leader">
+      <div class="leader-addr">0x8a2f...b3c1</div>
+      <div class="leader-pnl">+$142.3K</div>
+      <div class="leader-meta">78% win &bull; 42 trades</div>
+    </div>
+    <div class="leader">
+      <div class="leader-addr">0x4d5e...6f7g</div>
+      <div class="leader-pnl">+$98.7K</div>
+      <div class="leader-meta">72% win &bull; 31 trades</div>
+    </div>
+    <div class="leader">
+      <div class="leader-addr">0x1a2b...3c4d</div>
+      <div class="leader-pnl">+$67.1K</div>
+      <div class="leader-meta">65% win &bull; 58 trades</div>
+    </div>
+    <div class="leader">
+      <div class="leader-addr">0x9f8e...7d6c</div>
+      <div class="leader-pnl">+$45.2K</div>
+      <div class="leader-meta">81% win &bull; 19 trades</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

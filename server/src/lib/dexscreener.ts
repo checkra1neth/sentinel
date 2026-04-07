@@ -62,3 +62,16 @@ export async function getTrendingTokens(): Promise<BoostedToken[]> {
     return [];
   }
 }
+
+/** DefiLlama price fallback — works when DexScreener doesn't index the chain */
+export async function getTokenPrice(chain: string, tokenAddress: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://coins.llama.fi/prices/current/${chain}:${tokenAddress}`);
+    if (!res.ok) return null;
+    const data = await res.json() as { coins?: Record<string, { price?: number }> };
+    const key = `${chain}:${tokenAddress}`;
+    return data.coins?.[key]?.price ?? null;
+  } catch {
+    return null;
+  }
+}

@@ -7,7 +7,7 @@ import { eventBus } from "../events/event-bus.js";
 import { settings } from "../settings.js";
 import { pendingStore } from "../pending-store.js";
 import { type ScannerAgent } from "../agents/scanner-agent.js";
-import { onchainosSignal, onchainosSwap, onchainosMarket, onchainosPortfolio, onchainosDefi } from "../lib/onchainos.js";
+import { onchainosSignal, onchainosSwap, onchainosMarket, onchainosPortfolio, onchainosDefi, onchainosToken, onchainosTrenches, onchainosSecurity, onchainosGateway } from "../lib/onchainos.js";
 import { config } from "../config.js";
 import { getTokenPairs, searchTokens, getTrendingTokens } from "../lib/dexscreener.js";
 import { getUniswapPools, getPoolApy } from "../lib/defillama.js";
@@ -530,6 +530,260 @@ export function createServiceRouter(
   router.delete("/pending/:token", (req: Request, res: Response): void => {
     const removed = pendingStore.remove(req.params.token);
     res.json({ removed });
+  });
+
+  // ── Token Intelligence ──
+
+  router.get("/token/holders/:token", (_req: Request, res: Response): void => {
+    try {
+      const tagFilter = _req.query.tag ? Number(_req.query.tag) : undefined;
+      const result = onchainosToken.holders(_req.params.token, config.chainId, tagFilter);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/token/top-traders/:token", (_req: Request, res: Response): void => {
+    try {
+      const tagFilter = _req.query.tag ? Number(_req.query.tag) : undefined;
+      const result = onchainosToken.topTrader(_req.params.token, config.chainId, tagFilter);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/token/trades/:token", (_req: Request, res: Response): void => {
+    try {
+      const limit = _req.query.limit ? Number(_req.query.limit) : undefined;
+      const tagFilter = _req.query.tag ? Number(_req.query.tag) : undefined;
+      const result = onchainosToken.trades(_req.params.token, config.chainId, limit, tagFilter);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/token/cluster/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosToken.clusterOverview(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/token/cluster-holders/:token", (req: Request, res: Response): void => {
+    try {
+      const range = String(req.query.range ?? "3");
+      const result = onchainosToken.clusterTopHolders(req.params.token, range, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/token/info/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosToken.info(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/token/cluster-supported-chains", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosToken.clusterSupportedChains();
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Market ──
+
+  router.get("/market/index/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosMarket.index(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Trenches Intelligence ──
+
+  router.get("/trenches/dev-info/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosTrenches.tokenDevInfo(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/trenches/similar/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosTrenches.similarTokens(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/trenches/aped/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosTrenches.apedWallet(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/trenches/bundle/:token", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosTrenches.tokenBundleInfo(_req.params.token, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Leaderboard ──
+
+  router.get("/leaderboard", (_req: Request, res: Response): void => {
+    try {
+      const timeFrame = String(_req.query.timeFrame ?? "3");
+      const sortBy = String(_req.query.sortBy ?? "1");
+      const walletType = _req.query.walletType ? String(_req.query.walletType) : undefined;
+      const result = onchainosSignal.leaderboardList(config.chainId, timeFrame, sortBy, walletType);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Gateway ──
+
+  router.get("/gateway/gas", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosGateway.gas(config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.post("/gateway/simulate", (req: Request, res: Response): void => {
+    try {
+      const { from, to, data } = req.body as { from?: string; to?: string; data?: string };
+      if (!from || !to || !data) { res.status(400).json({ error: "from, to, data required" }); return; }
+      const result = onchainosGateway.simulate(from, to, data, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Security ──
+
+  router.get("/security/dapp-scan", (_req: Request, res: Response): void => {
+    try {
+      const domain = String(_req.query.domain ?? _req.query.url ?? "");
+      if (!domain) { res.status(400).json({ error: "domain required" }); return; }
+      const result = onchainosSecurity.dappScan(domain);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/security/approvals/:address", (_req: Request, res: Response): void => {
+    try {
+      const chainId = _req.query.chain ? Number(_req.query.chain) : undefined;
+      const limit = _req.query.limit ? Number(_req.query.limit) : undefined;
+      const cursor = _req.query.cursor ? String(_req.query.cursor) : undefined;
+      const result = onchainosSecurity.approvals(_req.params.address, chainId, limit, cursor);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── Portfolio PnL ──
+
+  router.get("/portfolio/overview", (_req: Request, res: Response): void => {
+    try {
+      const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const timeFrame = String(_req.query.timeFrame ?? "7d");
+      const result = onchainosPortfolio.overview(executor.walletAddress, config.chainId, timeFrame);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/portfolio/pnl", (_req: Request, res: Response): void => {
+    try {
+      const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const result = onchainosPortfolio.recentPnl(executor.walletAddress, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/portfolio/token-pnl/:token", (_req: Request, res: Response): void => {
+    try {
+      const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const result = onchainosPortfolio.tokenPnl(executor.walletAddress, config.chainId, _req.params.token);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/portfolio/history", (_req: Request, res: Response): void => {
+    try {
+      const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
+      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const begin = _req.query.begin ? String(_req.query.begin) : undefined;
+      const end = _req.query.end ? String(_req.query.end) : undefined;
+      const limit = _req.query.limit ? Number(_req.query.limit) : undefined;
+      const cursor = _req.query.cursor ? String(_req.query.cursor) : undefined;
+      const token = _req.query.token ? String(_req.query.token) : undefined;
+      const txType = _req.query.txType ? String(_req.query.txType) : undefined;
+      const result = onchainosPortfolio.dexHistory(executor.walletAddress, config.chainId, begin, end, limit, cursor, token, txType);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── DeFi Products ──
+
+  router.get("/defi/products", (_req: Request, res: Response): void => {
+    try {
+      const page = _req.query.page ? Number(_req.query.page) : 1;
+      const result = onchainosDefi.list(page);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  router.get("/defi/detail/:investmentId", (_req: Request, res: Response): void => {
+    try {
+      const result = onchainosDefi.detail(Number(_req.params.investmentId));
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
   });
 
   return router;

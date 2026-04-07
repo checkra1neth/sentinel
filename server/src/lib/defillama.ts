@@ -11,6 +11,8 @@ export interface LlamaPool {
   apy: number;
   stablecoin: boolean;
   exposure: string;
+  volumeUsd1d: number | null;
+  volumeUsd7d: number | null;
 }
 
 let cachedPools: LlamaPool[] = [];

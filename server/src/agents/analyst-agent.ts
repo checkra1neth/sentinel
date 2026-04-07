@@ -117,10 +117,16 @@ export class AnalystAgent extends BaseAgent {
       }
     }
 
-    // 4. Dev info (rug history + memepump tags)
-    const devResult = onchainosTrenches.devInfo(tokenAddress, config.chainId);
+    // 4. Dev info — use token-dev-info (real dev rug pull history, not token-details)
+    const devResult = onchainosTrenches.tokenDevInfo(tokenAddress, config.chainId);
     const devData = (devResult.success ? devResult.data : null) as Record<string, unknown> | null;
-    const devTags = (devData?.tags ?? null) as Record<string, unknown> | null;
+    const devLaunchedInfo = (devData?.devLaunchedInfo ?? null) as Record<string, unknown> | null;
+    const devHoldingInfo = (devData?.devHoldingInfo ?? null) as Record<string, unknown> | null;
+
+    // 4b. Token details (memepump tags, social, market data)
+    const detailsResult = onchainosTrenches.tokenDetails(tokenAddress, config.chainId);
+    const detailsData = (detailsResult.success ? detailsResult.data : null) as Record<string, unknown> | null;
+    const devTags = (detailsData?.tags ?? null) as Record<string, unknown> | null;
 
     // 5. Advanced info (holder concentration)
     const advResult = onchainosToken.advancedInfo(tokenAddress, config.chainId);
@@ -322,15 +328,18 @@ export class AnalystAgent extends BaseAgent {
       }
     }
 
-    // --- Source C: Dev/Rug history from memepump ---
-    const devRugPullCount = Number(advData?.devRugPullTokenCount ?? 0);
-    const hasRug =
-      devRugPullCount > 0 ||
-      devData?.rugHistory === true ||
-      devData?.hasRug === true;
+    // --- Source C: Dev/Rug history from token-dev-info ---
+    const devRugPullCount = Number(devLaunchedInfo?.rugPullCount ?? advData?.devRugPullTokenCount ?? 0);
+    const devTotalTokens = Number(devLaunchedInfo?.totalTokens ?? advData?.devCreateTokenCount ?? 0);
+    const devMigratedCount = Number(devLaunchedInfo?.migratedCount ?? 0);
+    const hasRug = devRugPullCount > 0;
     if (hasRug) {
-      risks.push(`rug_history(${devRugPullCount} rugs)`);
+      risks.push(`rug_history(${devRugPullCount}/${devTotalTokens} rugs)`);
       riskScore += 40;
+    }
+    if (devTotalTokens > 10 && devMigratedCount === 0) {
+      risks.push(`serial_launcher(${devTotalTokens} tokens, 0 migrated)`);
+      riskScore += 15;
     }
 
     // --- Source D: Bytecode probe (owner, proxy) ---
@@ -503,7 +512,8 @@ export class AnalystAgent extends BaseAgent {
     // --- Source K: DefiLlama APY data ---
     let defiLlamaApy: number | undefined;
     try {
-      const llamaPool = await getPoolApy(tokenSymbol || String(symbol ?? ""), "X Layer");
+      const symForLlama = String(priceData?.symbol ?? symbol ?? advData?.symbol ?? "");
+      const llamaPool = await getPoolApy(symForLlama, "X Layer");
       if (llamaPool) {
         defiLlamaApy = llamaPool.apy;
         if (llamaPool.apy > 1000) {
@@ -533,8 +543,73 @@ export class AnalystAgent extends BaseAgent {
       }
     } catch { /* Trading API unavailable */ }
 
+    // --- Source M: Cluster analysis (rug pull probability) ---
+    let clusterData: Record<string, unknown> | null = null;
+    try {
+      const clusterResult = onchainosToken.clusterOverview(tokenAddress, config.chainId);
+      if (clusterResult.success && clusterResult.data) {
+        clusterData = clusterResult.data as Record<string, unknown>;
+        const rugPullPercent = Number(clusterData.rugPullPercent ?? 0);
+        const newAddressPercent = Number(clusterData.holderNewAddressPercent ?? 0);
+        const sameFundPercent = Number(clusterData.holderSameFundSourcePercent ?? 0);
+
+        if (rugPullPercent > 50) {
+          risks.push(`cluster_rug_risk(${rugPullPercent.toFixed(0)}%)`);
+          riskScore += 25;
+        } else if (rugPullPercent > 20) {
+          risks.push(`cluster_rug_risk(${rugPullPercent.toFixed(0)}%)`);
+          riskScore += 10;
+        }
+        if (newAddressPercent > 50) {
+          risks.push(`cluster_new_addresses(${newAddressPercent.toFixed(0)}%)`);
+          riskScore += 10;
+        }
+        if (sameFundPercent > 30) {
+          risks.push(`cluster_same_fund(${sameFundPercent.toFixed(0)}%)`);
+          riskScore += 12;
+        }
+      }
+    } catch { /* cluster unavailable */ }
+
+    // --- Source N: Token holders (smart money / whale presence) ---
+    let holderInsight: { smartMoneyCount: number; whaleCount: number; kolCount: number } | null = null;
+    try {
+      const holdersResult = onchainosToken.holders(tokenAddress, config.chainId);
+      if (holdersResult.success && Array.isArray(holdersResult.data)) {
+        const holderList = holdersResult.data as Array<Record<string, unknown>>;
+        // Count tagged holders from top 100
+        let smartMoneyCount = 0;
+        let whaleCount = 0;
+        let kolCount = 0;
+        for (const h of holderList) {
+          const tags = h.tags as string[] | undefined;
+          if (tags?.includes("3")) smartMoneyCount++;
+          if (tags?.includes("4")) whaleCount++;
+          if (tags?.includes("1")) kolCount++;
+        }
+        holderInsight = { smartMoneyCount, whaleCount, kolCount };
+      }
+    } catch { /* holders unavailable */ }
+
+    // --- Source O: Top traders PnL ---
+    let topTraderAvgPnl: number | null = null;
+    try {
+      const traderResult = onchainosToken.topTrader(tokenAddress, config.chainId);
+      if (traderResult.success && Array.isArray(traderResult.data)) {
+        const traders = traderResult.data as Array<Record<string, string>>;
+        if (traders.length > 0) {
+          const pnls = traders.map((t) => Number(t.totalPnlUsd ?? 0));
+          topTraderAvgPnl = pnls.reduce((s, p) => s + p, 0) / pnls.length;
+          if (topTraderAvgPnl < -1000) {
+            risks.push(`top_traders_losing(avg:$${topTraderAvgPnl.toFixed(0)})`);
+            riskScore += 8;
+          }
+        }
+      }
+    } catch { /* top traders unavailable */ }
+
     // --- Source G: Age & activity ---
-    const holders = Number(priceData?.holders ?? advData?.totalHolders ?? 0);
+    const holders = Number(priceData?.holders ?? advData?.totalHolders ?? devTags?.totalHolders ?? 0);
     if (holders > 0 && holders < 10) {
       risks.push(`tiny_community(${holders} holders)`);
       riskScore += 10;
@@ -607,6 +682,20 @@ export class AnalystAgent extends BaseAgent {
       dexScreener: dexScreenerData,
       defiLlamaApy,
       uniswapRoute,
+      clusterOverview: clusterData ? {
+        clusterConcentration: String(clusterData.clusterConcentration ?? ""),
+        rugPullPercent: Number(clusterData.rugPullPercent ?? 0),
+        newAddressPercent: Number(clusterData.holderNewAddressPercent ?? 0),
+        sameFundPercent: Number(clusterData.holderSameFundSourcePercent ?? 0),
+      } : undefined,
+      holderInsight: holderInsight ?? undefined,
+      topTraderAvgPnl: topTraderAvgPnl ?? undefined,
+      devInfo: devLaunchedInfo ? {
+        totalTokens: Number(devLaunchedInfo.totalTokens ?? 0),
+        rugPullCount: Number(devLaunchedInfo.rugPullCount ?? 0),
+        migratedCount: Number(devLaunchedInfo.migratedCount ?? 0),
+        goldenGemCount: Number(devLaunchedInfo.goldenGemCount ?? 0),
+      } : undefined,
     };
 
     // 10. Store verdict

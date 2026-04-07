@@ -91,25 +91,31 @@ export default function DiscoverPage(): React.ReactNode {
       });
     }
 
+    // Whale/Smart Money/KOL signals — token data is nested in s.token object
     for (const s of whaleSignals ?? []) {
-      const addr = String(s.tokenContractAddress ?? s.token ?? s.address ?? "").toLowerCase();
-      if (!addr) continue;
+      const tok = s.token as Record<string, unknown> | undefined;
+      const addr = String(tok?.tokenAddress ?? s.tokenContractAddress ?? s.address ?? "").toLowerCase();
+      if (!addr || addr === "undefined") continue;
       const existing = byAddr.get(addr);
       const ts = Number(s.timestamp ?? s.blockTimestamp ?? Date.now());
       if (!existing || ts > existing.timestamp) {
         byAddr.set(addr, {
           ...(existing ?? {}),
           token: addr,
-          tokenSymbol: String(s.tokenSymbol ?? s.symbol ?? existing?.tokenSymbol ?? ""),
-          tokenName: String(s.tokenName ?? existing?.tokenName ?? ""),
+          tokenSymbol: String(tok?.symbol ?? s.tokenSymbol ?? existing?.tokenSymbol ?? ""),
+          tokenName: String(tok?.name ?? s.tokenName ?? existing?.tokenName ?? ""),
           priceUsd: Number(s.price ?? s.priceUsd ?? existing?.priceUsd ?? 0) || undefined,
+          marketCap: Number(tok?.marketCapUsd ?? existing?.marketCap ?? 0) || undefined,
           source: mapSource(String(s.tracker ?? "")),
           timestamp: ts,
         });
       }
     }
 
+    // Trending — filter to X Layer only (chainId "xlayer" or 196)
     for (const t of trending ?? []) {
+      const chain = String(t.chainId ?? "");
+      if (chain !== "xlayer" && chain !== "196") continue;
       const addr = String(t.tokenAddress ?? t.address ?? "").toLowerCase();
       if (!addr) continue;
       if (!byAddr.has(addr)) {

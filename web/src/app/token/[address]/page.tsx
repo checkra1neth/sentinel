@@ -38,7 +38,10 @@ export default function TokenProfilePage(): React.ReactNode {
 
   const pair = pairs?.[0];
   const holdersArr = Array.isArray(holdersData?.data) ? (holdersData.data as Record<string, unknown>[]) : [];
-  const smartMoneyCount = holdersArr.filter((h) => String(h.tag) === "3").length;
+  // Smart money count: prefer holderInsight from verdict (pre-computed), fallback to counting tag=3
+  const vi = verdict as Record<string, unknown> | null;
+  const holderInsight = vi?.holderInsight as Record<string, unknown> | undefined;
+  const smartMoneyCount = Number(holderInsight?.smartMoneyCount ?? 0) || holdersArr.filter((h) => String(h.tag) === "3").length;
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10">
