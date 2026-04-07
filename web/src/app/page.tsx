@@ -77,7 +77,7 @@ export default function LandingPage(): React.ReactNode {
             Autonomous security oracle on X Layer. Three AI agents work in sequence: Scanner discovers tokens, Analyst scores risk, Executor invests in what&apos;s safe.
           </p>
           <Link
-            href="/feed"
+            href="/discover"
             className="inline-block text-sm font-medium text-[#09090b] bg-[#06b6d4] px-6 py-2.5 rounded hover:opacity-90 transition-opacity"
           >
             Open Dashboard
