@@ -1,19 +1,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchPortfolioOverview, fetchPortfolioPnl, formatUsd } from "../lib/api";
+import { fetchPortfolioOverview, fetchPortfolioPnl, formatUsd, REFETCH_NORMAL } from "../lib/api";
 
 export function PortfolioOverview(): React.ReactNode {
   const { data: overview } = useQuery({
     queryKey: ["portfolio-overview"],
     queryFn: () => fetchPortfolioOverview("7d"),
-    refetchInterval: 15_000,
+    refetchInterval: REFETCH_NORMAL,
   });
 
   const { data: pnl } = useQuery({
     queryKey: ["portfolio-pnl"],
     queryFn: fetchPortfolioPnl,
-    refetchInterval: 15_000,
+    refetchInterval: REFETCH_NORMAL,
   });
 
   // Backend wraps in {success, data} or returns flat from /portfolio

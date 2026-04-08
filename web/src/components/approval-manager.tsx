@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { encodeFunctionData, type Address } from "viem";
-import { fetchApprovals, truncAddr } from "../lib/api";
+import { fetchApprovals, truncAddr, REFETCH_SLOW } from "../lib/api";
 
 const approveAbi = [
   {
@@ -72,7 +72,7 @@ export function ApprovalManager(): React.ReactNode {
     queryKey: ["approvals", address],
     queryFn: () => fetchApprovals(address!),
     enabled: isConnected && !!address,
-    refetchInterval: 30_000,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const { data: txHash, sendTransaction, isPending: isSending, reset: resetSend } = useSendTransaction();
@@ -83,7 +83,7 @@ export function ApprovalManager(): React.ReactNode {
   const allApprovals: Approval[] = useMemo(() => {
     if (!Array.isArray(dataList)) return [];
     return dataList.map((a) => ({
-      tokenSymbol: String(a.symbol ?? a.tokenSymbol ?? "???"),
+      tokenSymbol: String(a.symbol ?? a.tokenSymbol ?? "Unknown"),
       tokenAddress: String(a.tokenAddress ?? a.tokenContractAddress ?? ""),
       spender: String(a.approvalAddress ?? a.spender ?? ""),
       protocolName: String(a.protocolName ?? ""),

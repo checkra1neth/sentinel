@@ -1,5 +1,9 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
+export const REFETCH_FAST = 10_000;   // 10s — real-time data
+export const REFETCH_NORMAL = 30_000; // 30s — standard polling
+export const REFETCH_SLOW = 60_000;   // 60s — slow-changing data
+
 async function get<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${API_URL}/api${path}`);
@@ -104,12 +108,12 @@ export interface DexPair {
 }
 
 export async function fetchDiscoverFeed(): Promise<Record<string, unknown>[]> {
-  const data = await get<{ tokens?: Record<string, unknown>[] }>("/discover/feed?limit=50");
+  const data = await get<{ tokens?: Record<string, unknown>[] }>("/discover/feed?limit=200");
   return data?.tokens ?? [];
 }
 
 export async function fetchWhaleSignals(): Promise<Record<string, unknown>[]> {
-  const data = await get<{ signals?: Record<string, unknown>[] }>("/discover/whales?limit=30");
+  const data = await get<{ signals?: Record<string, unknown>[] }>("/discover/whales?limit=100");
   return data?.signals ?? [];
 }
 
@@ -118,13 +122,13 @@ export async function fetchTrending(): Promise<Record<string, unknown>[]> {
   return data?.tokens ?? [];
 }
 
-export async function fetchVerdicts(limit = 50): Promise<Verdict[]> {
+export async function fetchVerdicts(limit = 200): Promise<Verdict[]> {
   const data = await get<{ verdicts?: Verdict[] }>(`/verdicts?limit=${limit}`);
   return data?.verdicts ?? [];
 }
 
-export async function fetchLeaderboard(): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>("/leaderboard?timeFrame=3&sortBy=1");
+export async function fetchLeaderboard(timeFrame = "3", sortBy = "1"): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/leaderboard?timeFrame=${timeFrame}&sortBy=${sortBy}`);
   return data ?? {};
 }
 
@@ -156,7 +160,7 @@ export async function fetchTopTraders(address: string): Promise<Record<string, u
   return data ?? {};
 }
 
-export async function fetchTokenTrades(address: string, limit = 20): Promise<Record<string, unknown>> {
+export async function fetchTokenTrades(address: string, limit = 100): Promise<Record<string, unknown>> {
   const data = await get<Record<string, unknown>>(`/token/trades/${address}?limit=${limit}`);
   return data ?? {};
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { fetchManagedPortfolio, formatUsd } from "../lib/api";
+import { fetchManagedPortfolio, formatUsd, REFETCH_NORMAL } from "../lib/api";
 
 interface TokenBalance {
   token: string;
@@ -15,7 +15,7 @@ export function TokenBalances(): React.ReactNode {
   const { data } = useQuery({
     queryKey: ["managed-portfolio"],
     queryFn: fetchManagedPortfolio,
-    refetchInterval: 15_000,
+    refetchInterval: REFETCH_NORMAL,
   });
 
   // Backend returns {positions: [...], walletBalances: [...], totalValue: {...}}
@@ -25,7 +25,7 @@ export function TokenBalances(): React.ReactNode {
   const tokens: TokenBalance[] = Array.isArray(source)
     ? source.map((t) => ({
         token: String(t.token ?? t.tokenAddress ?? t.address ?? ""),
-        tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? "???"),
+        tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? "Unknown"),
         balanceUsd: Number(t.balanceUsd ?? t.valueUsd ?? t.amountInvested ?? 0),
         priceChange24h: Number(t.priceChange24h ?? t.change24h ?? 0),
       }))

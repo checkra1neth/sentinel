@@ -8,6 +8,7 @@ import {
   approvePendingInvest,
   rejectPending,
   truncAddr,
+  REFETCH_FAST,
 } from "../lib/api";
 
 export function PendingApprovals(): React.ReactNode {
@@ -16,13 +17,13 @@ export function PendingApprovals(): React.ReactNode {
   const { data: analyzeQueue = [] } = useQuery({
     queryKey: ["pendingAnalyze"],
     queryFn: fetchPendingAnalyze,
-    refetchInterval: 10_000,
+    refetchInterval: REFETCH_FAST,
   });
 
   const { data: investQueue = [] } = useQuery({
     queryKey: ["pendingInvest"],
     queryFn: fetchPendingInvest,
-    refetchInterval: 10_000,
+    refetchInterval: REFETCH_FAST,
   });
 
   const approveAnalyze = useMutation({

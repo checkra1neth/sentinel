@@ -56,7 +56,7 @@ export default function PortfolioPage(): React.ReactNode {
   const positions: LpPosition[] = Array.isArray(lpData?.positions)
     ? (lpData.positions as Record<string, unknown>[]).map((p) => ({
         token: String(p.token ?? ""),
-        tokenSymbol: String(p.tokenSymbol ?? "???"),
+        tokenSymbol: String(p.tokenSymbol ?? "Unknown"),
         poolName: String(p.poolName ?? ""),
         platformName: String(p.platformName ?? ""),
         amountInvested: String(p.amountInvested ?? "0"),

@@ -2,7 +2,17 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDexHistory, formatUsd, timeAgo, truncAddr } from "../lib/api";
+import { fetchDexHistory, formatUsd, timeAgo, truncAddr, REFETCH_NORMAL } from "../lib/api";
+
+const EXPLORER_TX: Record<number, string> = {
+  1: "https://etherscan.io/tx/",
+  196: "https://www.oklink.com/xlayer/tx/",
+  56: "https://bscscan.com/tx/",
+  137: "https://polygonscan.com/tx/",
+  42161: "https://arbiscan.io/tx/",
+  10: "https://optimistic.etherscan.io/tx/",
+  8453: "https://basescan.org/tx/",
+};
 
 interface DexTrade {
   txHash: string;
@@ -11,6 +21,7 @@ interface DexTrade {
   amount: string;
   priceUsd: number;
   timestamp: number;
+  chainIndex: number;
 }
 
 const TX_TYPES = ["All", "BUY", "SELL"] as const;
@@ -26,7 +37,7 @@ export function DexHistory(): React.ReactNode {
         limit: 50,
         txType: txFilter === "All" ? undefined : txFilter,
       }),
-    refetchInterval: 15_000,
+    refetchInterval: REFETCH_NORMAL,
   });
 
   // Backend wraps in {success, data: {transactionList: [...]}} or {success: false}
@@ -36,10 +47,11 @@ export function DexHistory(): React.ReactNode {
     ? (txList as Record<string, unknown>[]).map((t) => ({
         txHash: String(t.txHash ?? t.transactionHash ?? ""),
         txType: String(t.txType ?? t.type ?? t.side ?? "").toUpperCase(),
-        tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? "???"),
+        tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? "Unknown"),
         amount: String(t.amount ?? t.quantity ?? "0"),
         priceUsd: Number(t.priceUsd ?? t.price ?? 0),
         timestamp: Number(t.timestamp ?? t.blockTimestamp ?? Date.now()),
+        chainIndex: Number(t.chainIndex ?? t.chainId ?? 196),
       }))
     : [];
 
@@ -98,7 +110,7 @@ export function DexHistory(): React.ReactNode {
                   <td className="py-2 text-right hidden sm:table-cell">
                     {t.txHash ? (
                       <a
-                        href={`https://www.oklink.com/xlayer/tx/${t.txHash}`}
+                        href={`${EXPLORER_TX[t.chainIndex] ?? EXPLORER_TX[196]}${t.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[#52525b] hover:text-[#a1a1aa] transition-colors"

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, useBalance, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useBalance, useChainId, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, parseUnits, type Address } from "viem";
 import {
   fetchGas,
@@ -10,6 +10,7 @@ import {
   searchTokens,
   fetchTokenInfo,
   fetchAnalysis,
+  REFETCH_NORMAL,
   type Verdict,
 } from "../lib/api";
 import { SwapPreFlight } from "./swap-preflight";
@@ -26,6 +27,18 @@ interface TokenOption {
 }
 
 const NATIVE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
+const EXPLORER_TX: Record<number, string> = {
+  1: "https://etherscan.io/tx/",
+  196: "https://www.oklink.com/xlayer/tx/",
+  56: "https://bscscan.com/tx/",
+  137: "https://polygonscan.com/tx/",
+  42161: "https://arbiscan.io/tx/",
+  10: "https://optimistic.etherscan.io/tx/",
+  8453: "https://basescan.org/tx/",
+};
+
+const SLIPPAGE_OPTIONS = [0.1, 0.5, 1, 3] as const;
 
 function useTokenSearch(query: string): { results: TokenOption[]; loading: boolean } {
   const [results, setResults] = useState<TokenOption[]>([]);
@@ -47,7 +60,7 @@ function useTokenSearch(query: string): { results: TokenOption[]; loading: boole
         if (data?.tokenSymbol || data?.tokenName) {
           setResults([{
             address: String(data.tokenContractAddress ?? query),
-            symbol: String(data.tokenSymbol ?? "???"),
+            symbol: String(data.tokenSymbol ?? "Unknown"),
             name: String(data.tokenName ?? ""),
             decimals: Number(data.decimal ?? 18),
           }]);
@@ -79,6 +92,7 @@ function useTokenSearch(query: string): { results: TokenOption[]; loading: boole
 
 export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
   const { address: userAddress, isConnected } = useAccount();
+  const chainId = useChainId();
 
   const [fromToken, setFromToken] = useState(NATIVE_ADDRESS);
   const [fromSymbol, setFromSymbol] = useState("OKB");
@@ -86,7 +100,7 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
   const [toToken, setToToken] = useState(initialToToken ?? "");
   const [toSymbol, setToSymbol] = useState("");
   const [amount, setAmount] = useState("");
-  const [slippage] = useState(0.5);
+  const [slippage, setSlippage] = useState(0.5);
 
   const [fromSearch, setFromSearch] = useState("");
   const [toSearch, setToSearch] = useState("");
@@ -108,7 +122,7 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
   const { data: gasData } = useQuery({
     queryKey: ["gas"],
     queryFn: fetchGas,
-    refetchInterval: 15_000,
+    refetchInterval: REFETCH_NORMAL,
   });
   const gasObj = (gasData as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
   const gasGwei = gasObj ? String(gasObj.normal ?? gasObj.min ?? "--") : "--";
@@ -118,7 +132,7 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
     queryKey: ["swap-quote", fromToken, toToken, amount],
     queryFn: () => fetchSwapQuote(fromToken, toToken, amount),
     enabled: !!fromToken && !!toToken && !!amount && Number(amount) > 0 && toToken.length >= 40,
-    refetchInterval: 15_000,
+    refetchInterval: REFETCH_NORMAL,
   });
 
   // Use actual amounts from OKX quote (not unit prices)
@@ -282,9 +296,24 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
           <span>Gas</span>
           <span className="text-[#fafafa]">{gasGwei} Gwei</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <span>Slippage</span>
-          <span className="text-[#fafafa]">{slippage}%</span>
+          <div className="flex gap-1">
+            {SLIPPAGE_OPTIONS.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setSlippage(opt)}
+                className={`px-2.5 py-1 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
+                  slippage === opt
+                    ? "border-[#06b6d4]/40 text-[#06b6d4] bg-[#06b6d4]/10"
+                    : "border-white/[0.06] text-[#52525b] hover:text-[#a1a1aa]"
+                }`}
+              >
+                {opt}%
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -319,7 +348,7 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
       {isConfirmed && txHash && (
         <p className="mt-2 text-[11px] font-mono text-emerald-400">
           TX confirmed:{" "}
-          <a href={`https://www.oklink.com/xlayer/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">
+          <a href={`${EXPLORER_TX[chainId] ?? EXPLORER_TX[196]}${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">
             {txHash.slice(0, 10)}...
           </a>
         </p>
