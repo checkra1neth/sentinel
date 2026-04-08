@@ -253,9 +253,31 @@ export async function exitPosition(investmentId: string, ratio = 1): Promise<Rec
   return data ?? {};
 }
 
-export async function fetchApprovals(address: string, limit = 50): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/security/approvals/${address}?limit=${limit}`);
-  return data ?? {};
+export async function fetchApprovals(address: string): Promise<Record<string, unknown>> {
+  // Fetch all chains in parallel, paginate each until no more cursor
+  const chainIds = [1, 56, 137, 42161, 10, 8453, 196, 324, 43114, 250];
+  const allItems: Record<string, unknown>[] = [];
+
+  const fetches = chainIds.map(async (chain) => {
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const qs = `?chain=${chain}&limit=100${cursor ? `&cursor=${cursor}` : ""}`;
+      const data = await get<Record<string, unknown>>(`/security/approvals/${address}${qs}`);
+      const inner = (data?.data ?? data) as Record<string, unknown> | undefined;
+      const list = inner?.dataList as Record<string, unknown>[] | undefined;
+      if (Array.isArray(list) && list.length > 0) {
+        allItems.push(...list);
+        const nextCursor = inner?.cursor ? String(inner.cursor) : undefined;
+        if (!nextCursor || nextCursor === "0" || list.length < 100) break;
+        cursor = nextCursor;
+      } else {
+        break;
+      }
+    }
+  });
+
+  await Promise.all(fetches);
+  return { success: true, data: { dataList: allItems, total: allItems.length } };
 }
 
 export async function fetchDexHistory(params?: {
