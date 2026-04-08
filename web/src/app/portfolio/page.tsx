@@ -73,11 +73,10 @@ export default function PortfolioPage(): React.ReactNode {
       }))
     : [];
 
-  const agents = agentsData as Record<string, unknown> | null;
-  const agentExecutor = agents?.executor as Record<string, unknown> | undefined;
-  const executorAddress = String(
-    agents?.executorAddress ?? agentExecutor?.address ?? agents?.address ?? "",
-  );
+  // Backend returns {agents: [{id, name, walletAddress}...]} — Executor is id "3"
+  const agentsArr = (agentsData as Record<string, unknown>)?.agents as Record<string, unknown>[] | undefined;
+  const executor = agentsArr?.find((a) => a.name === "Executor" || a.id === "3");
+  const executorAddress = String(executor?.walletAddress ?? "");
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">

@@ -29,10 +29,11 @@ export function DexHistory(): React.ReactNode {
     refetchInterval: 15_000,
   });
 
-  const trades: DexTrade[] = Array.isArray(data?.transactions ?? data?.trades ?? data?.data)
-    ? (
-        (data?.transactions ?? data?.trades ?? data?.data) as Record<string, unknown>[]
-      ).map((t) => ({
+  // Backend wraps in {success, data: {transactionList: [...]}} or {success: false}
+  const rawData = (data as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const txList = rawData?.transactionList ?? rawData?.transactions ?? data?.transactions ?? data?.trades;
+  const trades: DexTrade[] = Array.isArray(txList)
+    ? (txList as Record<string, unknown>[]).map((t) => ({
         txHash: String(t.txHash ?? t.transactionHash ?? ""),
         txType: String(t.txType ?? t.type ?? t.side ?? "").toUpperCase(),
         tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? "???"),

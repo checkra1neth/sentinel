@@ -28,14 +28,17 @@ export function DefiProducts({ onDeposit }: DefiProductsProps): React.ReactNode 
   });
 
   const pools = useMemo((): Pool[] => {
+    // Backend returns {success, data: {list: [...]}}
     const raw = productsData as Record<string, unknown> | null;
-    const products = (raw?.products ?? raw?.data ?? []) as Record<string, unknown>[];
+    const dataObj = raw?.data as Record<string, unknown> | undefined;
+    const list = dataObj?.list ?? raw?.list ?? raw?.products;
+    const products = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
 
     const mapped: Pool[] = products.map((p) => ({
       investmentId: String(p.investmentId ?? p.id ?? ""),
       name: String(p.name ?? p.poolName ?? ""),
-      platform: String(p.platform ?? p.protocol ?? ""),
-      apy: Number(p.apy ?? p.apr ?? 0),
+      platform: String(p.platformName ?? p.platform ?? p.protocol ?? ""),
+      apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
       tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
     }));
 

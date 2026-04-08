@@ -23,15 +23,18 @@ export function ApprovalManager({ address }: ApprovalManagerProps): React.ReactN
     refetchInterval: 30_000,
   });
 
-  const approvals: Approval[] = Array.isArray(data?.approvals)
-    ? (data.approvals as Record<string, unknown>[]).map((a) => ({
-        tokenSymbol: String(a.tokenSymbol ?? a.symbol ?? "???"),
-        tokenContractAddress: String(a.tokenContractAddress ?? a.token ?? ""),
-        spender: String(a.spender ?? a.approvedSpender ?? ""),
-        amount: String(a.amount ?? a.allowance ?? "0"),
+  // Backend returns {success, data: {dataList: [...], cursor, total}}
+  const rawData = (data as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const dataList = rawData?.dataList as Record<string, unknown>[] | undefined;
+  const approvals: Approval[] = Array.isArray(dataList)
+    ? dataList.map((a) => ({
+        tokenSymbol: String(a.symbol ?? a.tokenSymbol ?? "???"),
+        tokenContractAddress: String(a.tokenAddress ?? a.tokenContractAddress ?? ""),
+        spender: String(a.approvalAddress ?? a.spender ?? ""),
+        amount: String(a.remainAmtPrecise ?? a.remainAmount ?? a.amount ?? "0"),
         isUnlimited:
-          String(a.amount ?? a.allowance ?? "").toLowerCase().includes("unlimited") ||
-          Number(a.amount ?? a.allowance ?? 0) > 1e30,
+          String(a.remainAmount ?? "").length > 15 ||
+          Number(a.remainAmount ?? 0) > 1e15,
       }))
     : [];
 

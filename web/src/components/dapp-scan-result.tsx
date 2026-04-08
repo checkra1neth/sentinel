@@ -25,7 +25,10 @@ interface DappScanResultCardProps {
 }
 
 export function DappScanResultCard({ data, domain }: DappScanResultCardProps): React.ReactNode {
-  const hasDanger = data.isPhishing || data.isMalware || data.isSuspicious;
+  // Backend returns {success, data: {isMalicious}} — map to our interface
+  const rawData = (data as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const isMalicious = Boolean(rawData?.isMalicious ?? data.isPhishing ?? data.isMalware);
+  const hasDanger = isMalicious || data.isPhishing || data.isMalware || data.isSuspicious;
   const statusColor = hasDanger ? "#ef4444" : "#34d399";
   const statusLabel = hasDanger ? "DANGEROUS" : "SAFE";
 
@@ -43,11 +46,6 @@ export function DappScanResultCard({ data, domain }: DappScanResultCardProps): R
         >
           {statusLabel}
         </span>
-        {data.riskLevel && (
-          <span className="text-[11px] text-[#52525b] font-mono">
-            Risk: {data.riskLevel}
-          </span>
-        )}
       </div>
 
       {/* Security flags */}
@@ -55,10 +53,9 @@ export function DappScanResultCard({ data, domain }: DappScanResultCardProps): R
         Security Flags
       </div>
       <div className="max-w-md">
-        <KVRow label="Phishing" value={<FlagValue danger={data.isPhishing} />} />
-        <KVRow label="Malware" value={<FlagValue danger={data.isMalware} />} />
-        <KVRow label="Suspicious" value={<FlagValue danger={data.isSuspicious} />} />
-        <KVRow label="Risk Level" value={data.riskLevel || "—"} />
+        <KVRow label="Malicious" value={<FlagValue danger={isMalicious} />} />
+        <KVRow label="Phishing" value={<FlagValue danger={Boolean(data.isPhishing)} />} />
+        <KVRow label="Suspicious" value={<FlagValue danger={Boolean(data.isSuspicious)} />} />
       </div>
     </div>
   );

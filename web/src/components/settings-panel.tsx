@@ -20,20 +20,25 @@ export function SettingsPanel(): React.ReactNode {
 
   useEffect(() => {
     if (!settings) return;
-    const intervalMs = Number(settings.scanInterval ?? 0);
-    setScanInterval(String(intervalMs > 0 ? Math.round(intervalMs / 60_000) : ""));
-    setRiskThreshold(String(settings.riskThreshold ?? ""));
-    setAutoInvest(Boolean(settings.autoInvest));
-    setMaxInvestment(String(settings.maxInvestment ?? ""));
+    // Backend returns nested: {discover: {interval, mode}, analyze: {riskThreshold}, invest: {mode, maxAmount}}
+    const discover = settings.discover as Record<string, unknown> | undefined;
+    const analyze = settings.analyze as Record<string, unknown> | undefined;
+    const invest = settings.invest as Record<string, unknown> | undefined;
+    // Cron interval "*/5 * * * *" → extract minute number
+    const cronStr = String(discover?.interval ?? "*/5 * * * *");
+    const cronMatch = cronStr.match(/\*\/(\d+)/);
+    setScanInterval(cronMatch ? cronMatch[1] : "5");
+    setRiskThreshold(String(analyze?.riskThreshold ?? "40"));
+    setAutoInvest(String(invest?.mode ?? discover?.mode) === "auto");
+    setMaxInvestment(String(invest?.maxAmount ?? invest?.maxInvestment ?? "500"));
   }, [settings]);
 
   const save = useMutation({
     mutationFn: () =>
       updateSettings({
-        scanInterval: Number(scanInterval) * 60_000,
-        riskThreshold: Number(riskThreshold),
-        autoInvest,
-        maxInvestment: Number(maxInvestment),
+        discover: { interval: `*/${scanInterval} * * * *`, mode: autoInvest ? "auto" : "manual" },
+        analyze: { riskThreshold: Number(riskThreshold) },
+        invest: { mode: autoInvest ? "auto" : "manual", maxAmount: Number(maxInvestment) },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settings"] });

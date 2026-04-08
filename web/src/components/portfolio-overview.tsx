@@ -16,10 +16,13 @@ export function PortfolioOverview(): React.ReactNode {
     refetchInterval: 15_000,
   });
 
-  const totalValue = Number(overview?.totalValue ?? overview?.totalInvested ?? 0);
-  const pnl24h = Number(pnl?.pnl24h ?? pnl?.dailyPnl ?? 0);
-  const pnl7d = Number(pnl?.pnl7d ?? pnl?.weeklyPnl ?? 0);
-  const positions = Number(overview?.totalPositions ?? overview?.positionsCount ?? 0);
+  // Backend wraps in {success, data} or returns flat from /portfolio
+  const ovData = (overview as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const pnlData = (pnl as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const totalValue = Number(ovData?.totalValue ?? overview?.totalValue ?? overview?.totalInvested ?? 0);
+  const pnl24h = Number(pnlData?.pnl24h ?? pnlData?.dailyPnl ?? pnl?.pnl24h ?? 0);
+  const pnl7d = Number(pnlData?.pnl7d ?? pnlData?.weeklyPnl ?? pnl?.pnl7d ?? 0);
+  const positions = Number(ovData?.totalPositions ?? overview?.totalPositions ?? 0);
 
   return (
     <div className="flex flex-wrap gap-x-6 gap-y-3 py-4 border-b border-white/[0.06]">

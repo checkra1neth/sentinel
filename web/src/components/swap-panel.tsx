@@ -113,7 +113,9 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
     setShowToDropdown(false);
   }, []);
 
-  const gasGwei = gasData ? String((gasData as Record<string, unknown>).standard ?? (gasData as Record<string, unknown>).gasPrice ?? "--") : "--";
+  // Backend wraps gas in {success, data: {max, min, normal}}
+  const gasObj = (gasData as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const gasGwei = gasObj ? String(gasObj.normal ?? gasObj.min ?? "--") : "--";
   const estimatedOut = amount && Number(amount) > 0 ? "--" : "0";
 
   const canExecute = fromToken && toToken && amount && Number(amount) > 0 && !swapMutation.isPending;

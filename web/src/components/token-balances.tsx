@@ -18,11 +18,15 @@ export function TokenBalances(): React.ReactNode {
     refetchInterval: 15_000,
   });
 
-  const tokens: TokenBalance[] = Array.isArray(data?.tokens)
-    ? (data.tokens as Record<string, unknown>[]).map((t) => ({
-        token: String(t.token ?? t.address ?? t.tokenContractAddress ?? ""),
+  // Backend returns {positions: [...], walletBalances: [...], totalValue: {...}}
+  const walletBal = data?.walletBalances as Record<string, unknown>[] | undefined;
+  const posArr = data?.positions as Record<string, unknown>[] | undefined;
+  const source = Array.isArray(walletBal) && walletBal.length > 0 ? walletBal : posArr;
+  const tokens: TokenBalance[] = Array.isArray(source)
+    ? source.map((t) => ({
+        token: String(t.token ?? t.tokenAddress ?? t.address ?? ""),
         tokenSymbol: String(t.tokenSymbol ?? t.symbol ?? "???"),
-        balanceUsd: Number(t.balanceUsd ?? t.valueUsd ?? t.usdValue ?? 0),
+        balanceUsd: Number(t.balanceUsd ?? t.valueUsd ?? t.amountInvested ?? 0),
         priceChange24h: Number(t.priceChange24h ?? t.change24h ?? 0),
       }))
     : [];
