@@ -253,49 +253,16 @@ export function ApprovalManager(): React.ReactNode {
           )}
         </div>
 
-        {/* Batch revoke controls */}
-        <div className="flex items-center gap-2">
-          {selected.size > 0 && !isBatching && (
-            <button
-              type="button"
-              onClick={handleBatchRevoke}
-              className="px-3 py-1.5 rounded text-[10px] font-semibold bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 hover:bg-[#ef4444]/20 transition-colors cursor-pointer"
-            >
-              Revoke Selected ({selected.size})
-            </button>
-          )}
-          {isBatching && (
-            <>
-              <div className="flex items-center gap-2">
-                <div className="w-32 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#ef4444] rounded-full transition-all"
-                    style={{ width: `${batchTotal > 0 ? (batchDone / batchTotal) * 100 : 0}%` }}
-                  />
-                </div>
-                <span className="text-[10px] font-mono text-[#a1a1aa]">{batchDone}/{batchTotal}</span>
-              </div>
-              {batchStatus === "paused" ? (
-                <button
-                  type="button"
-                  onClick={handleResumeBatch}
-                  className="px-2.5 py-1 rounded text-[10px] font-mono border border-[#06b6d4]/40 text-[#06b6d4] hover:bg-[#06b6d4]/10 transition-colors cursor-pointer"
-                >
-                  Resume
-                </button>
-              ) : (
-                <span className="text-[10px] font-mono text-[#f59e0b]">Sign in wallet...</span>
-              )}
-              <button
-                type="button"
-                onClick={handleCancelBatch}
-                className="px-2.5 py-1 rounded text-[10px] font-mono border border-white/[0.06] text-[#52525b] hover:text-[#a1a1aa] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
+        {/* Batch revoke button */}
+        {selected.size > 0 && !isBatching && (
+          <button
+            type="button"
+            onClick={handleBatchRevoke}
+            className="px-3 py-1.5 rounded text-[10px] font-semibold bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 hover:bg-[#ef4444]/20 transition-colors cursor-pointer"
+          >
+            Revoke Selected ({selected.size})
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -439,7 +406,7 @@ export function ApprovalManager(): React.ReactNode {
         </div>
       )}
 
-      {lastTxHash && revokedSet.size > 0 && (
+      {lastTxHash && revokedSet.size > 0 && !isBatching && (
         <p className="mt-2 text-[11px] font-mono text-emerald-400">
           {revokedSet.size} revoked. Last TX:{" "}
           <a
@@ -451,6 +418,122 @@ export function ApprovalManager(): React.ReactNode {
             {lastTxHash.slice(0, 10)}...
           </a>
         </p>
+      )}
+
+      {/* ── Batch Revoke Modal (Rabby-style) ── */}
+      {isBatching && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="relative w-full max-w-xl bg-[#111113] border border-white/[0.06] rounded-lg shadow-2xl max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold text-[#fafafa]">
+                  Mass Revoke ({batchDone}/{batchTotal})
+                </h2>
+                <p className="text-[11px] font-mono text-[#52525b] mt-0.5">
+                  {batchStatus === "running"
+                    ? "Confirm each TX in your wallet — they auto-queue"
+                    : batchStatus === "paused"
+                      ? "Paused — user rejected a TX"
+                      : `Done — ${batchDone} revoked`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelBatch}
+                className="w-7 h-7 rounded flex items-center justify-center text-[#52525b] hover:text-[#fafafa] hover:bg-white/[0.06] transition-colors cursor-pointer"
+              >
+                {"\u2715"}
+              </button>
+            </div>
+
+            {/* Progress bar */}
+            <div className="px-5 py-2 shrink-0">
+              <div className="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#ef4444] rounded-full transition-all duration-300"
+                  style={{ width: `${batchTotal > 0 ? (batchDone / batchTotal) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-y-auto flex-1 px-5">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="text-left border-b border-white/[0.06] text-[#52525b] sticky top-0 bg-[#111113]">
+                    <th className="pb-2 font-medium text-[10px] w-8">#</th>
+                    <th className="pb-2 font-medium text-[10px]">Token</th>
+                    <th className="pb-2 font-medium text-[10px]">Spender</th>
+                    <th className="pb-2 font-medium text-[10px] text-center">Status</th>
+                    <th className="pb-2 font-medium text-[10px] text-right">Hash</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from(selected).sort((a, b) => a - b).map((idx, n) => {
+                    const a = approvals[idx];
+                    if (!a) return null;
+                    const done = revokedSet.has(idx);
+                    const active = currentIdx === idx;
+                    const pending = !done && !active;
+                    return (
+                      <tr key={`batch-${idx}`} className={`border-b border-white/[0.03] ${done ? "opacity-50" : active ? "bg-white/[0.02]" : ""}`}>
+                        <td className="py-2 text-[#52525b]">{n + 1}</td>
+                        <td className="py-2 text-[#fafafa]">{a.tokenSymbol}</td>
+                        <td className="py-2 text-[#a1a1aa]">
+                          {truncAddr(a.spender)}
+                          {a.protocolName && <span className="text-[#52525b] ml-1">({a.protocolName})</span>}
+                        </td>
+                        <td className="py-2 text-center">
+                          {done ? (
+                            <span className="text-[#34d399]">&#10003;</span>
+                          ) : active ? (
+                            <span className="text-[#f59e0b] animate-pulse">&#9679;</span>
+                          ) : (
+                            <span className="text-[#52525b]">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right text-[#52525b]">
+                          {done && lastTxHash ? `${lastTxHash.slice(0, 8)}...` : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-white/[0.06] shrink-0 flex justify-center">
+              {batchStatus === "paused" ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResumeBatch}
+                    className="px-4 py-2 rounded text-xs font-semibold bg-[#06b6d4] text-[#09090b] hover:bg-[#06b6d4]/80 transition-colors cursor-pointer"
+                  >
+                    Resume
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelBatch}
+                    className="px-4 py-2 rounded text-xs font-mono border border-white/[0.06] text-[#a1a1aa] hover:text-[#fafafa] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : batchStatus === "running" ? (
+                <button
+                  type="button"
+                  onClick={handleCancelBatch}
+                  className="px-4 py-2 rounded text-xs font-mono border border-white/[0.06] text-[#a1a1aa] hover:text-[#fafafa] transition-colors cursor-pointer"
+                >
+                  Pause
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
