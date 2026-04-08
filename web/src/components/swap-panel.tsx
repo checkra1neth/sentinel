@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   fetchGas,
+  fetchSwapQuote,
+  fetchWalletBalance,
   executeSwap,
   searchTokens,
   fetchTokenInfo,
@@ -96,6 +98,21 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
     refetchInterval: 15_000,
   });
 
+  // Fetch wallet balance for from-token
+  const { data: balanceData } = useQuery({
+    queryKey: ["wallet-balance", fromToken],
+    queryFn: () => fetchWalletBalance(fromToken === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" ? undefined : fromToken),
+    refetchInterval: 30_000,
+  });
+
+  // Fetch swap quote when both tokens and amount are set
+  const { data: quoteData } = useQuery({
+    queryKey: ["swap-quote", fromToken, toToken, amount],
+    queryFn: () => fetchSwapQuote(fromToken, toToken, amount),
+    enabled: !!fromToken && !!toToken && !!amount && Number(amount) > 0 && toToken.length >= 40,
+    refetchInterval: 15_000,
+  });
+
   const { data: toVerdict, isLoading: verdictLoading } = useQuery({
     queryKey: ["swap-preflight", toToken],
     queryFn: () => fetchAnalysis(toToken),
@@ -134,7 +151,37 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
   // Backend wraps gas in {success, data: {max, min, normal}}
   const gasObj = (gasData as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
   const gasGwei = gasObj ? String(gasObj.normal ?? gasObj.min ?? "--") : "--";
-  const estimatedOut = amount && Number(amount) > 0 ? "--" : "0";
+
+  // Balance from wallet
+  const balData = (balanceData as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const balDetails = (balData?.details as Record<string, unknown>[] | undefined)?.[0];
+  const tokenAssets = (balDetails?.tokenAssets as Record<string, unknown>[] | undefined) ?? [];
+  const nativeBalance = tokenAssets.length > 0
+    ? String((tokenAssets[0] as Record<string, unknown>)?.balance ?? "0")
+    : String(balData?.totalValueUsd ?? "0");
+  const walletBalance = fromToken === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    ? nativeBalance
+    : tokenAssets.find((a) => String((a as Record<string, unknown>).tokenContractAddress ?? "").toLowerCase() === fromToken.toLowerCase())
+      ? String((tokenAssets.find((a) => String((a as Record<string, unknown>).tokenContractAddress ?? "").toLowerCase() === fromToken.toLowerCase()) as Record<string, unknown>)?.balance ?? "0")
+      : "0";
+
+  // Quote data: extract estimated output and rate
+  const qData = (quoteData as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+  const routerList = (qData?.dexRouterList as Record<string, unknown>[] | undefined) ?? [];
+  const toTokenInfo = routerList.length > 0
+    ? (routerList[0] as Record<string, unknown>).toToken as Record<string, unknown> | undefined
+    : undefined;
+  const fromTokenInfo = routerList.length > 0
+    ? (routerList[0] as Record<string, unknown>).fromToken as Record<string, unknown> | undefined
+    : undefined;
+  const fromPrice = Number(fromTokenInfo?.tokenUnitPrice ?? 0);
+  const toPrice = Number(toTokenInfo?.tokenUnitPrice ?? 0);
+  const rateStr = fromPrice > 0 && toPrice > 0
+    ? (fromPrice / toPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })
+    : "--";
+  const estimatedOut = fromPrice > 0 && toPrice > 0 && Number(amount) > 0
+    ? ((Number(amount) * fromPrice) / toPrice).toLocaleString(undefined, { maximumFractionDigits: 4 })
+    : "0";
 
   const canExecute = fromToken && toToken && amount && Number(amount) > 0 && !swapMutation.isPending;
   const isDangerous = toVerdict?.verdict === "DANGEROUS";
@@ -161,6 +208,9 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
               onChange={(e) => setAmount(e.target.value)}
               className="flex-1 bg-white/[0.04] border border-white/[0.06] rounded px-3 py-2 text-xs font-mono text-[#fafafa] placeholder:text-[#52525b] outline-none focus:border-[#06b6d4]/40"
             />
+          </div>
+          <div className="mt-1 text-[10px] font-mono text-[#52525b]">
+            Balance: {walletBalance} {fromSymbol}
           </div>
           {showFromDropdown && (
             <TokenDropdown
@@ -229,7 +279,7 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
         <div className="flex justify-between">
           <span>Rate</span>
           <span className="text-[#fafafa]">
-            {fromSymbol && toSymbol ? `1 ${fromSymbol} = -- ${toSymbol}` : "--"}
+            {fromSymbol && toSymbol ? `1 ${fromSymbol} = ${rateStr} ${toSymbol}` : "--"}
           </span>
         </div>
         <div className="flex justify-between">

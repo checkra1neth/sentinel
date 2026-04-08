@@ -289,6 +289,17 @@ export async function fetchGas(): Promise<Record<string, unknown>> {
   return data ?? {};
 }
 
+export async function fetchSwapQuote(from: string, to: string, amount: string): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/swap/quote?from=${from}&to=${to}&amount=${encodeURIComponent(amount)}`);
+  return data ?? {};
+}
+
+export async function fetchWalletBalance(token?: string): Promise<Record<string, unknown>> {
+  const path = token ? `/wallet/balance?token=${token}` : "/wallet/balance";
+  const data = await get<Record<string, unknown>>(path);
+  return data ?? {};
+}
+
 export async function simulateTx(from: string, to: string, data: string): Promise<Record<string, unknown>> {
   const res = await post<Record<string, unknown>>("/gateway/simulate", { from, to, data });
   return res ?? {};

@@ -7,7 +7,7 @@ import { eventBus } from "../events/event-bus.js";
 import { settings } from "../settings.js";
 import { pendingStore } from "../pending-store.js";
 import { type ScannerAgent } from "../agents/scanner-agent.js";
-import { onchainosSignal, onchainosSwap, onchainosMarket, onchainosPortfolio, onchainosDefi, onchainosToken, onchainosTrenches, onchainosSecurity, onchainosGateway } from "../lib/onchainos.js";
+import { onchainosSignal, onchainosSwap, onchainosMarket, onchainosPortfolio, onchainosDefi, onchainosToken, onchainosTrenches, onchainosSecurity, onchainosGateway, onchainosWallet } from "../lib/onchainos.js";
 import { config } from "../config.js";
 import { getTokenPairs, searchTokens, getTrendingTokens } from "../lib/dexscreener.js";
 import { getUniswapPools, getPoolApy } from "../lib/defillama.js";
@@ -354,6 +354,34 @@ export function createServiceRouter(
         riskScore: riskScore ?? 15,
       });
       res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // Swap quote (no execution)
+  router.get("/swap/quote", (_req: Request, res: Response): void => {
+    try {
+      const from = String(_req.query.from ?? "");
+      const to = String(_req.query.to ?? "");
+      const amount = String(_req.query.amount ?? "");
+      if (!from || !to || !amount) {
+        res.status(400).json({ error: "from, to, amount required" });
+        return;
+      }
+      const result = onchainosSwap.quote(from, to, amount, config.chainId);
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // Wallet balance for a specific token (or native)
+  router.get("/wallet/balance", (_req: Request, res: Response): void => {
+    try {
+      const tokenAddress = _req.query.token ? String(_req.query.token) : undefined;
+      const result = onchainosWallet.balance(config.chainId, tokenAddress);
+      res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
