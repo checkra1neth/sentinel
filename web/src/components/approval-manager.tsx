@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient, useSwitchChain } from "wagmi";
 import { encodeFunctionData, type Address } from "viem";
 import { fetchApprovals, truncAddr, REFETCH_SLOW } from "../lib/api";
 
@@ -75,6 +75,7 @@ export function ApprovalManager(): React.ReactNode {
   });
 
   const { data: walletClient } = useWalletClient();
+  const { switchChainAsync } = useSwitchChain();
 
   // Batch queue state
   const [batchQueue, setBatchQueue] = useState<number[]>([]);
@@ -143,10 +144,17 @@ export function ApprovalManager(): React.ReactNode {
     });
   }, []);
 
-  // Send single revoke TX via walletClient, wait for receipt, return hash
+  // Send single revoke TX via walletClient — auto-switches chain
   const revokeOne = useCallback(
     async (approval: Approval): Promise<string> => {
       if (!walletClient) throw new Error("Wallet not connected");
+
+      // Switch chain if needed (e.g. approval on Ethereum but wallet on X Layer)
+      const currentChain = walletClient.chain?.id;
+      if (currentChain !== approval.chainIndex) {
+        await switchChainAsync({ chainId: approval.chainIndex });
+      }
+
       const calldata = encodeFunctionData({
         abi: approveAbi,
         functionName: "approve",
@@ -159,7 +167,7 @@ export function ApprovalManager(): React.ReactNode {
       });
       return hash;
     },
-    [walletClient],
+    [walletClient, switchChainAsync],
   );
 
   // Revoke single
