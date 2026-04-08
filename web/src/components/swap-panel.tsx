@@ -6,6 +6,7 @@ import {
   fetchGas,
   executeSwap,
   searchTokens,
+  fetchTokenInfo,
   fetchAnalysis,
   formatUsd,
   type Verdict,
@@ -35,6 +36,23 @@ function useTokenSearch(query: string): { results: TokenOption[]; loading: boole
     }
     setLoading(true);
     timerRef.current = setTimeout(async () => {
+      // If input looks like a contract address, use OKX token info directly
+      const isAddress = /^0x[a-fA-F0-9]{40,42}$/.test(query);
+      if (isAddress) {
+        const info = await fetchTokenInfo(query);
+        const data = (info?.data ?? info) as Record<string, unknown> | undefined;
+        if (data?.tokenSymbol || data?.tokenName) {
+          setResults([{
+            address: String(data.tokenContractAddress ?? query),
+            symbol: String(data.tokenSymbol ?? "???"),
+            name: String(data.tokenName ?? ""),
+          }]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Otherwise search via DexScreener
       const pairs = await searchTokens(query);
       const opts: TokenOption[] = pairs.map((p) => {
         const base = p.baseToken as Record<string, unknown> | undefined;
