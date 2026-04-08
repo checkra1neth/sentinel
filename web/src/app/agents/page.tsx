@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { PendingApprovals } from "../../components/pending-approvals";
+import { SettingsPanel } from "../../components/settings-panel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
@@ -53,6 +55,8 @@ export default function AgentsPage(): React.ReactNode {
         <span>Dangerous <span className="text-[#ef4444]">{stats?.totalDangerous ?? 0}</span></span>
         <span>Events <span className="text-[#a1a1aa]">{eventStats?.totalEvents ?? 0}</span></span>
       </div>
+
+      <PendingApprovals />
 
       {/* Agent sections */}
       <div className="space-y-1 mb-10">
@@ -122,6 +126,8 @@ export default function AgentsPage(): React.ReactNode {
           </tbody>
         </table>
       </div>
+
+      <SettingsPanel />
     </div>
   );
 }

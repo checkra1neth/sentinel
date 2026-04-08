@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  fetchLpPositions,
+  fetchAgents,
+  collectAllRewards,
+  exitPosition,
+  formatUsd,
+  timeAgo,
+  truncAddr,
+} from "../../lib/api";
+import { PortfolioOverview } from "../../components/portfolio-overview";
+import { TokenBalances } from "../../components/token-balances";
+import { ApprovalManager } from "../../components/approval-manager";
+import { DexHistory } from "../../components/dex-history";
 
 interface LpPosition {
   token: string;
@@ -14,104 +25,137 @@ interface LpPosition {
   tvl: string;
   range: number;
   timestamp: number;
+  investmentId?: string;
 }
-
-interface Portfolio {
-  positions: LpPosition[];
-  totalInvested: number;
-  totalPositions: number;
-  avgApr: number;
-  executorAddress: string;
-}
-
-function fmt(v: number): string {
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
-  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
-  return `$${v.toFixed(2)}`;
-}
-
-function ago(ts: number): string {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
-
-function truncAddr(a: string): string { return `${a.slice(0, 6)}...${a.slice(-4)}`; }
 
 export default function PortfolioPage(): React.ReactNode {
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchData = useCallback(async (): Promise<void> => {
-    try {
-      const res = await fetch(`${API_URL}/api/portfolio`);
-      if (res.ok) setPortfolio(await res.json() as Portfolio);
-    } catch { /* */ }
-  }, []);
+  const { data: lpData } = useQuery({
+    queryKey: ["lp-positions"],
+    queryFn: fetchLpPositions,
+    refetchInterval: 15_000,
+  });
 
-  useEffect(() => {
-    fetchData();
-    const iv = setInterval(fetchData, 15_000);
-    return () => clearInterval(iv);
-  }, [fetchData]);
+  const { data: agentsData } = useQuery({
+    queryKey: ["agents"],
+    queryFn: fetchAgents,
+    refetchInterval: 60_000,
+  });
+
+  const collectMutation = useMutation({
+    mutationFn: collectAllRewards,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lp-positions"] });
+    },
+  });
+
+  const exitMutation = useMutation({
+    mutationFn: (investmentId: string) => exitPosition(investmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lp-positions"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-overview"] });
+    },
+  });
+
+  const positions: LpPosition[] = Array.isArray(lpData?.positions)
+    ? (lpData.positions as Record<string, unknown>[]).map((p) => ({
+        token: String(p.token ?? ""),
+        tokenSymbol: String(p.tokenSymbol ?? "???"),
+        poolName: String(p.poolName ?? ""),
+        platformName: String(p.platformName ?? ""),
+        amountInvested: String(p.amountInvested ?? "0"),
+        apr: String(p.apr ?? "0"),
+        tvl: String(p.tvl ?? "0"),
+        range: Number(p.range ?? 0),
+        timestamp: Number(p.timestamp ?? Date.now()),
+        investmentId: String(p.investmentId ?? p.id ?? ""),
+      }))
+    : [];
+
+  const agents = agentsData as Record<string, unknown> | null;
+  const agentExecutor = agents?.executor as Record<string, unknown> | undefined;
+  const executorAddress = String(
+    agents?.executorAddress ?? agentExecutor?.address ?? agents?.address ?? "",
+  );
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
       <h1 className="text-xl font-bold tracking-tight mb-6">Portfolio</h1>
 
-      {/* Summary line */}
-      <div className="mb-6 text-xs font-mono text-[#52525b] flex flex-wrap gap-x-4 gap-y-1">
-        <span>Invested <span className="text-[#a1a1aa]">{fmt(portfolio?.totalInvested ?? 0)}</span></span>
-        <span>Positions <span className="text-[#a1a1aa]">{portfolio?.totalPositions ?? 0}</span></span>
-        <span>Avg APR <span className="text-[#a1a1aa]">{(portfolio?.avgApr ?? 0).toFixed(1)}%</span></span>
-        {portfolio?.executorAddress && (
-          <span>
-            Executor{" "}
-            <a
-              href={`https://www.oklink.com/xlayer/address/${portfolio.executorAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#52525b] hover:text-[#a1a1aa] transition-colors"
+      {/* Overview stats */}
+      <PortfolioOverview />
+
+      {/* Token balances */}
+      <TokenBalances />
+
+      {/* LP Positions */}
+      <div className="py-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider">LP Positions</div>
+          {positions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => collectMutation.mutate()}
+              disabled={collectMutation.isPending}
+              className="text-[10px] font-mono text-[#a1a1aa] hover:text-[#fafafa] transition-colors disabled:opacity-40"
             >
-              {truncAddr(portfolio.executorAddress)}
-            </a>
-          </span>
+              {collectMutation.isPending ? "Collecting..." : "Collect All"}
+            </button>
+          )}
+        </div>
+        {positions.length === 0 ? (
+          <p className="text-xs text-[#52525b] font-mono py-4">
+            No LP positions. Executor invests in tokens rated SAFE.
+          </p>
+        ) : (
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="text-left border-b border-white/[0.06]">
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider">Token</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider">Pool</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Invested</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">APR</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right hidden sm:table-cell">TVL</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right hidden sm:table-cell">Range</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Age</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p, i) => (
+                <tr key={`${p.token}-${i}`} className="border-b border-white/[0.03]">
+                  <td className="py-2 text-[#fafafa]">{p.tokenSymbol}</td>
+                  <td className="py-2 text-[#a1a1aa]">{p.poolName}</td>
+                  <td className="py-2 text-right text-[#a1a1aa]">{formatUsd(Number(p.amountInvested))}</td>
+                  <td className="py-2 text-right text-[#34d399]">{(Number(p.apr) * 100).toFixed(1)}%</td>
+                  <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">{formatUsd(Number(p.tvl))}</td>
+                  <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">{p.range ? `\u00B1${p.range}%` : "--"}</td>
+                  <td className="py-2 text-right text-[#52525b]">{timeAgo(p.timestamp)}</td>
+                  <td className="py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (p.investmentId) exitMutation.mutate(p.investmentId);
+                      }}
+                      disabled={exitMutation.isPending || !p.investmentId}
+                      className="text-[#ef4444] hover:text-[#f87171] transition-colors disabled:opacity-40 text-[10px]"
+                    >
+                      Exit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
-      {/* Positions table */}
-      {!portfolio || portfolio.positions.length === 0 ? (
-        <p className="text-sm text-[#52525b] py-8">
-          No positions yet. Executor invests in tokens rated SAFE.
-        </p>
-      ) : (
-        <table className="w-full text-xs font-mono">
-          <thead>
-            <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
-              <th className="pb-2 font-medium">Token</th>
-              <th className="pb-2 font-medium">Pool</th>
-              <th className="pb-2 font-medium text-right">Invested</th>
-              <th className="pb-2 font-medium text-right">APR</th>
-              <th className="pb-2 font-medium text-right hidden sm:table-cell">TVL</th>
-              <th className="pb-2 font-medium text-right hidden sm:table-cell">Range</th>
-              <th className="pb-2 font-medium text-right">Age</th>
-            </tr>
-          </thead>
-          <tbody>
-            {portfolio.positions.map((p, i) => (
-              <tr key={`${p.token}-${i}`} className="border-b border-white/[0.03]">
-                <td className="py-2 text-[#fafafa]">{p.tokenSymbol}</td>
-                <td className="py-2 text-[#a1a1aa]">{p.poolName}</td>
-                <td className="py-2 text-right text-[#a1a1aa]">{fmt(Number(p.amountInvested))}</td>
-                <td className="py-2 text-right text-[#34d399]">{(Number(p.apr) * 100).toFixed(1)}%</td>
-                <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">{fmt(Number(p.tvl))}</td>
-                <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">±{p.range}%</td>
-                <td className="py-2 text-right text-[#52525b]">{ago(p.timestamp)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {/* Approvals */}
+      {executorAddress && <ApprovalManager address={executorAddress} />}
+
+      {/* DEX History */}
+      <DexHistory />
     </div>
   );
 }
