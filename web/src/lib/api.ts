@@ -10,6 +10,44 @@ async function get<T>(path: string): Promise<T | null> {
   }
 }
 
+async function post<T>(path: string, body?: unknown): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_URL}/api${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_URL}/api${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function del<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_URL}/api${path}`, { method: "DELETE" });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 // -- Discover endpoints --
 
 export interface DiscoverToken {
@@ -145,6 +183,187 @@ export async function fetchBundleInfo(address: string): Promise<Record<string, u
 
 export async function fetchApedWallets(address: string): Promise<Record<string, unknown>> {
   const data = await get<Record<string, unknown>>(`/trenches/aped/${address}`);
+  return data ?? {};
+}
+
+// -- Analyze endpoints --
+
+export interface DappScanResult {
+  domain: string;
+  isPhishing: boolean;
+  isMalware: boolean;
+  isSuspicious: boolean;
+  riskLevel: string;
+  [key: string]: unknown;
+}
+
+export async function scanToken(address: string): Promise<Verdict | null> {
+  const data = await post<{ verdict?: Verdict }>(`/scan/${address}`);
+  return data?.verdict ?? null;
+}
+
+export async function rescanToken(address: string): Promise<Verdict | null> {
+  const data = await post<{ verdict?: Verdict }>(`/analyze/${address}/rescan`);
+  return data?.verdict ?? null;
+}
+
+export async function scanDapp(domain: string): Promise<DappScanResult | null> {
+  return get<DappScanResult>(`/security/dapp-scan?domain=${encodeURIComponent(domain)}`);
+}
+
+export async function fetchTokenInfo(address: string): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/token/info/${address}`);
+  return data ?? {};
+}
+
+// -- Portfolio endpoints --
+
+export async function fetchPortfolioOverview(timeFrame = "7d"): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/portfolio/overview?timeFrame=${timeFrame}`);
+  return data ?? {};
+}
+
+export async function fetchPortfolioPnl(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/portfolio/pnl");
+  return data ?? {};
+}
+
+export async function fetchManagedPortfolio(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/manage/portfolio");
+  return data ?? {};
+}
+
+export async function fetchAgentBalances(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/manage/balances");
+  return data ?? {};
+}
+
+export async function fetchLpPositions(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/portfolio");
+  return data ?? {};
+}
+
+export async function collectAllRewards(): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>("/manage/collect-all");
+  return data ?? {};
+}
+
+export async function exitPosition(investmentId: string, ratio = 1): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>(`/manage/exit/${investmentId}`, { ratio });
+  return data ?? {};
+}
+
+export async function fetchApprovals(address: string, limit = 50): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/security/approvals/${address}?limit=${limit}`);
+  return data ?? {};
+}
+
+export async function fetchDexHistory(params?: {
+  limit?: number;
+  cursor?: string;
+  token?: string;
+  txType?: string;
+  begin?: string;
+  end?: string;
+}): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  if (params?.token) qs.set("token", params.token);
+  if (params?.txType) qs.set("txType", params.txType);
+  if (params?.begin) qs.set("begin", params.begin);
+  if (params?.end) qs.set("end", params.end);
+  const data = await get<Record<string, unknown>>(`/portfolio/history?${qs.toString()}`);
+  return data ?? {};
+}
+
+export async function fetchAgents(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/agents");
+  return data ?? {};
+}
+
+// -- Trade endpoints --
+
+export async function fetchGas(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/gateway/gas");
+  return data ?? {};
+}
+
+export async function simulateTx(from: string, to: string, data: string): Promise<Record<string, unknown>> {
+  const res = await post<Record<string, unknown>>("/gateway/simulate", { from, to, data });
+  return res ?? {};
+}
+
+export async function executeSwap(fromToken: string, toToken: string, amount: string): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>("/invest/swap", { fromToken, toToken, amount });
+  return data ?? {};
+}
+
+export async function searchTokens(query: string): Promise<Record<string, unknown>[]> {
+  const data = await get<{ pairs?: Record<string, unknown>[] }>(`/dex/search?q=${encodeURIComponent(query)}`);
+  return data?.pairs ?? [];
+}
+
+export async function fetchDefiProducts(page = 1): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/defi/products?page=${page}`);
+  return data ?? {};
+}
+
+export async function fetchDefiDetail(investmentId: string): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/defi/detail/${investmentId}`);
+  return data ?? {};
+}
+
+export async function previewInvestment(token: string, amount: string, tokenSymbol: string): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>("/invest/preview", { token, amount, tokenSymbol });
+  return data ?? {};
+}
+
+export async function executeInvestment(token: string, amount: string, tokenSymbol: string, riskScore: number): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>("/invest/execute", { token, amount, tokenSymbol, riskScore });
+  return data ?? {};
+}
+
+export async function fetchYields(symbol?: string): Promise<Record<string, unknown>> {
+  const path = symbol ? `/yields?symbol=${encodeURIComponent(symbol)}` : "/yields";
+  const data = await get<Record<string, unknown>>(path);
+  return data ?? {};
+}
+
+// -- Agents endpoints --
+
+export async function fetchPendingAnalyze(): Promise<Record<string, unknown>[]> {
+  const data = await get<{ tokens?: Record<string, unknown>[] }>("/pending/analyze");
+  return data?.tokens ?? [];
+}
+
+export async function fetchPendingInvest(): Promise<Record<string, unknown>[]> {
+  const data = await get<{ tokens?: Record<string, unknown>[] }>("/pending/invest");
+  return data?.tokens ?? [];
+}
+
+export async function approvePendingAnalyze(token: string): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>(`/pending/analyze/${token}/approve`);
+  return data ?? {};
+}
+
+export async function approvePendingInvest(token: string): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>(`/pending/invest/${token}/approve`);
+  return data ?? {};
+}
+
+export async function rejectPending(token: string): Promise<Record<string, unknown>> {
+  const data = await del<Record<string, unknown>>(`/pending/${token}`);
+  return data ?? {};
+}
+
+export async function fetchSettings(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/settings");
+  return data ?? {};
+}
+
+export async function updateSettings(settings: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const data = await patch<Record<string, unknown>>("/settings", settings);
   return data ?? {};
 }
 
