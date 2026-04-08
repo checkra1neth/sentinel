@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWalletClient } from "wagmi";
 import { encodeFunctionData, type Address } from "viem";
 import { fetchApprovals, truncAddr, REFETCH_SLOW } from "../lib/api";
 
@@ -65,7 +65,6 @@ export function ApprovalManager(): React.ReactNode {
   const [selectedChain, setSelectedChain] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [revokedSet, setRevokedSet] = useState<Set<number>>(new Set());
-  const [revokingIdx, setRevokingIdx] = useState<number | null>(null);
   const [search, setSearch] = useState("");
 
   const { data, refetch } = useQuery({
@@ -75,8 +74,15 @@ export function ApprovalManager(): React.ReactNode {
     refetchInterval: REFETCH_SLOW,
   });
 
-  const { data: txHash, sendTransaction, isPending: isSending, reset: resetSend } = useSendTransaction();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+  const { data: walletClient } = useWalletClient();
+
+  // Batch queue state
+  const [batchQueue, setBatchQueue] = useState<number[]>([]);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [currentIdx, setCurrentIdx] = useState<number | null>(null);
+  const [batchStatus, setBatchStatus] = useState<"idle" | "running" | "paused">("idle");
+  const [lastTxHash, setLastTxHash] = useState<string | null>(null);
+  const batchRunning = useRef(false);
 
   const rawData = (data as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
   const dataList = rawData?.dataList as Record<string, unknown>[] | undefined;
@@ -137,64 +143,94 @@ export function ApprovalManager(): React.ReactNode {
     });
   }, []);
 
-  // Revoke single
-  const handleRevoke = useCallback(
-    (idx: number) => {
-      const approval = approvals[idx];
-      if (!approval) return;
-      setRevokingIdx(idx);
-      resetSend();
+  // Send single revoke TX via walletClient, wait for receipt, return hash
+  const revokeOne = useCallback(
+    async (approval: Approval): Promise<string> => {
+      if (!walletClient) throw new Error("Wallet not connected");
       const calldata = encodeFunctionData({
         abi: approveAbi,
         functionName: "approve",
         args: [approval.spender as Address, BigInt(0)],
       });
-      sendTransaction({ to: approval.tokenAddress as Address, data: calldata });
+      const hash = await walletClient.sendTransaction({
+        to: approval.tokenAddress as Address,
+        data: calldata,
+        chain: null,
+      });
+      return hash;
     },
-    [approvals, resetSend, sendTransaction],
+    [walletClient],
   );
 
-  // Batch revoke — sequential
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
-  const handleBatchRevoke = useCallback(async () => {
-    const indices = Array.from(selected).filter((i) => !revokedSet.has(i));
-    if (indices.length === 0) return;
-    setBatchProgress({ current: 0, total: indices.length });
-    for (let n = 0; n < indices.length; n++) {
-      const idx = indices[n];
+  // Revoke single
+  const handleRevoke = useCallback(
+    async (idx: number) => {
       const approval = approvals[idx];
-      if (!approval) continue;
-      setBatchProgress({ current: n + 1, total: indices.length });
-      setRevokingIdx(idx);
-      const calldata = encodeFunctionData({
-        abi: approveAbi,
-        functionName: "approve",
-        args: [approval.spender as Address, BigInt(0)],
-      });
+      if (!approval) return;
+      setCurrentIdx(idx);
       try {
-        sendTransaction({ to: approval.tokenAddress as Address, data: calldata });
-        // Mark as revoked optimistically — user signed
+        const hash = await revokeOne(approval);
+        setLastTxHash(hash);
         setRevokedSet((prev) => new Set([...prev, idx]));
       } catch {
-        // User rejected — stop batch
-        break;
+        // user rejected
+      }
+      setCurrentIdx(null);
+      refetch();
+    },
+    [approvals, revokeOne, refetch],
+  );
+
+  // Batch revoke — auto-queue, wallet pops up one after another
+  const processBatch = useCallback(async (queue: number[]) => {
+    batchRunning.current = true;
+    setBatchStatus("running");
+    for (const idx of queue) {
+      if (!batchRunning.current) break; // user cancelled
+      const approval = approvals[idx];
+      if (!approval || revokedSet.has(idx)) continue;
+      setCurrentIdx(idx);
+      setBatchQueue((prev) => prev.filter((i) => i !== idx));
+      try {
+        const hash = await revokeOne(approval);
+        setLastTxHash(hash);
+        setRevokedSet((prev) => new Set([...prev, idx]));
+      } catch {
+        // user rejected — pause batch
+        setBatchStatus("paused");
+        batchRunning.current = false;
+        setCurrentIdx(null);
+        return;
       }
     }
-    setBatchProgress(null);
-    setRevokingIdx(null);
+    batchRunning.current = false;
+    setBatchStatus("idle");
+    setCurrentIdx(null);
     setSelected(new Set());
-    setTimeout(() => refetch(), 3000);
-  }, [selected, revokedSet, approvals, sendTransaction, refetch]);
+    refetch();
+  }, [approvals, revokedSet, revokeOne, refetch]);
 
-  // Track confirmed revoke
-  if (isConfirmed && revokingIdx !== null && !revokedSet.has(revokingIdx)) {
-    setRevokedSet((prev) => new Set([...prev, revokingIdx]));
-    setTimeout(() => {
-      setRevokingIdx(null);
-      resetSend();
-      refetch();
-    }, 1500);
-  }
+  const handleBatchRevoke = useCallback(() => {
+    const indices = Array.from(selected).filter((i) => !revokedSet.has(i)).sort((a, b) => a - b);
+    if (indices.length === 0) return;
+    setBatchQueue(indices);
+    setBatchTotal(indices.length);
+    processBatch(indices);
+  }, [selected, revokedSet, processBatch]);
+
+  const handleCancelBatch = useCallback(() => {
+    batchRunning.current = false;
+    setBatchStatus("idle");
+    setBatchQueue([]);
+    setCurrentIdx(null);
+  }, []);
+
+  const handleResumeBatch = useCallback(() => {
+    if (batchQueue.length > 0) processBatch(batchQueue);
+  }, [batchQueue, processBatch]);
+
+  const batchDone = batchTotal - batchQueue.length;
+  const isBatching = batchStatus === "running" || batchStatus === "paused";
 
   if (!isConnected) {
     return (
@@ -217,19 +253,49 @@ export function ApprovalManager(): React.ReactNode {
           )}
         </div>
 
-        {/* Batch revoke button */}
-        {selected.size > 0 && (
-          <button
-            type="button"
-            onClick={handleBatchRevoke}
-            disabled={batchProgress !== null}
-            className="px-3 py-1.5 rounded text-[10px] font-semibold bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 hover:bg-[#ef4444]/20 transition-colors cursor-pointer disabled:opacity-40"
-          >
-            {batchProgress
-              ? `Revoking ${batchProgress.current}/${batchProgress.total}...`
-              : `Revoke Selected (${selected.size})`}
-          </button>
-        )}
+        {/* Batch revoke controls */}
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && !isBatching && (
+            <button
+              type="button"
+              onClick={handleBatchRevoke}
+              className="px-3 py-1.5 rounded text-[10px] font-semibold bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 hover:bg-[#ef4444]/20 transition-colors cursor-pointer"
+            >
+              Revoke Selected ({selected.size})
+            </button>
+          )}
+          {isBatching && (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-32 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#ef4444] rounded-full transition-all"
+                    style={{ width: `${batchTotal > 0 ? (batchDone / batchTotal) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-mono text-[#a1a1aa]">{batchDone}/{batchTotal}</span>
+              </div>
+              {batchStatus === "paused" ? (
+                <button
+                  type="button"
+                  onClick={handleResumeBatch}
+                  className="px-2.5 py-1 rounded text-[10px] font-mono border border-[#06b6d4]/40 text-[#06b6d4] hover:bg-[#06b6d4]/10 transition-colors cursor-pointer"
+                >
+                  Resume
+                </button>
+              ) : (
+                <span className="text-[10px] font-mono text-[#f59e0b]">Sign in wallet...</span>
+              )}
+              <button
+                type="button"
+                onClick={handleCancelBatch}
+                className="px-2.5 py-1 rounded text-[10px] font-mono border border-white/[0.06] text-[#52525b] hover:text-[#a1a1aa] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -307,7 +373,7 @@ export function ApprovalManager(): React.ReactNode {
             </thead>
             <tbody>
               {approvals.map((a, i) => {
-                const isRevoking = revokingIdx === i && (isSending || isConfirming);
+                const isRevoking = currentIdx === i;
                 const wasRevoked = revokedSet.has(i);
                 const explorerAddr = EXPLORER_ADDR[a.chainIndex] ?? EXPLORER_ADDR[1];
                 return (
@@ -373,16 +439,16 @@ export function ApprovalManager(): React.ReactNode {
         </div>
       )}
 
-      {txHash && isConfirmed && (
+      {lastTxHash && revokedSet.size > 0 && (
         <p className="mt-2 text-[11px] font-mono text-emerald-400">
-          Revoked:{" "}
+          {revokedSet.size} revoked. Last TX:{" "}
           <a
-            href={`${EXPLORER_TX[approvals[revokingIdx ?? 0]?.chainIndex ?? 1] ?? EXPLORER_TX[1]}${txHash}`}
+            href={`${EXPLORER_TX[1]}${lastTxHash}`}
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
           >
-            {String(txHash).slice(0, 10)}...
+            {lastTxHash.slice(0, 10)}...
           </a>
         </p>
       )}
