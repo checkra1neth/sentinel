@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchLpPositions,
-  fetchAgents,
   collectAllRewards,
   exitPosition,
   formatUsd,
@@ -37,11 +36,7 @@ export default function PortfolioPage(): React.ReactNode {
     refetchInterval: 15_000,
   });
 
-  const { data: agentsData } = useQuery({
-    queryKey: ["agents"],
-    queryFn: fetchAgents,
-    refetchInterval: 60_000,
-  });
+  // Agents data no longer needed — ApprovalManager uses connected wallet directly
 
   const collectMutation = useMutation({
     mutationFn: collectAllRewards,
@@ -73,10 +68,7 @@ export default function PortfolioPage(): React.ReactNode {
       }))
     : [];
 
-  // Backend returns {agents: [{id, name, walletAddress}...]} — Executor is id "3"
-  const agentsArr = (agentsData as Record<string, unknown>)?.agents as Record<string, unknown>[] | undefined;
-  const executor = agentsArr?.find((a) => a.name === "Executor" || a.id === "3");
-  const executorAddress = String(executor?.walletAddress ?? "");
+  // ApprovalManager now uses connected wallet internally via useAccount()
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
@@ -150,8 +142,8 @@ export default function PortfolioPage(): React.ReactNode {
         )}
       </div>
 
-      {/* Approvals */}
-      {executorAddress && <ApprovalManager address={executorAddress} />}
+      {/* Approvals — uses connected wallet */}
+      <ApprovalManager />
 
       {/* DEX History */}
       <DexHistory />

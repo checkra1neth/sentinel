@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useAccount } from "wagmi";
 import { fetchApprovals, truncAddr } from "../lib/api";
 
 interface Approval {
@@ -11,15 +12,13 @@ interface Approval {
   isUnlimited: boolean;
 }
 
-interface ApprovalManagerProps {
-  address: string;
-}
+export function ApprovalManager(): React.ReactNode {
+  const { address, isConnected } = useAccount();
 
-export function ApprovalManager({ address }: ApprovalManagerProps): React.ReactNode {
   const { data } = useQuery({
     queryKey: ["approvals", address],
-    queryFn: () => fetchApprovals(address),
-    enabled: !!address,
+    queryFn: () => fetchApprovals(address!),
+    enabled: isConnected && !!address,
     refetchInterval: 30_000,
   });
 
@@ -38,11 +37,21 @@ export function ApprovalManager({ address }: ApprovalManagerProps): React.ReactN
       }))
     : [];
 
-  if (!address) return null;
+  if (!isConnected) {
+    return (
+      <div className="py-4">
+        <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-3">Token Approvals</div>
+        <p className="text-xs text-[#52525b] font-mono">Connect wallet to view approvals.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="py-4">
-      <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-3">Token Approvals</div>
+      <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-3">
+        Token Approvals
+        <span className="ml-2 text-[#52525b] normal-case tracking-normal">{truncAddr(address!)}</span>
+      </div>
       {approvals.length === 0 ? (
         <p className="text-xs text-[#52525b] font-mono">No active approvals.</p>
       ) : (
