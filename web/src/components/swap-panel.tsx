@@ -121,22 +121,25 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
     refetchInterval: 15_000,
   });
 
+  // Use actual amounts from OKX quote (not unit prices)
   const qData = (quoteData as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
-  const routerList = (qData?.dexRouterList as Record<string, unknown>[] | undefined) ?? [];
-  const toTokenQuote = routerList.length > 0
-    ? (routerList[0] as Record<string, unknown>).toToken as Record<string, unknown> | undefined
-    : undefined;
-  const fromTokenQuote = routerList.length > 0
-    ? (routerList[0] as Record<string, unknown>).fromToken as Record<string, unknown> | undefined
-    : undefined;
-  const fromPrice = Number(fromTokenQuote?.tokenUnitPrice ?? 0);
-  const toPrice = Number(toTokenQuote?.tokenUnitPrice ?? 0);
-  const rateStr = fromPrice > 0 && toPrice > 0
-    ? (fromPrice / toPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })
-    : "--";
-  const estimatedOut = fromPrice > 0 && toPrice > 0 && Number(amount) > 0
-    ? ((Number(amount) * fromPrice) / toPrice).toLocaleString(undefined, { maximumFractionDigits: 4 })
+  const toTokenAmountRaw = Number(String(qData?.toTokenAmount ?? "0"));
+  const toTokenDecimal = Number(
+    (qData?.toToken as Record<string, unknown>)?.decimal ?? 18,
+  );
+  const estimatedOut = toTokenAmountRaw > 0
+    ? (Number(toTokenAmountRaw) / 10 ** toTokenDecimal).toLocaleString(undefined, { maximumFractionDigits: 6 })
     : "0";
+  // Rate from actual quote amounts
+  const fromTokenAmountRaw = Number(String(qData?.fromTokenAmount ?? "0"));
+  const fromTokenDecimal = Number(
+    (qData?.fromToken as Record<string, unknown>)?.decimal ?? 18,
+  );
+  const fromAmt = Number(fromTokenAmountRaw) / 10 ** fromTokenDecimal;
+  const toAmt = Number(toTokenAmountRaw) / 10 ** toTokenDecimal;
+  const rateStr = fromAmt > 0 && toAmt > 0
+    ? (toAmt / fromAmt).toLocaleString(undefined, { maximumFractionDigits: 2 })
+    : "--";
 
   // Pre-flight security
   const { data: toVerdict, isLoading: verdictLoading } = useQuery({
@@ -193,7 +196,9 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
   }, [resetSend]);
 
   const isDangerous = toVerdict?.verdict === "DANGEROUS";
-  const canExecute = isConnected && fromToken && toToken && amount && Number(amount) > 0 && !isSending && !isConfirming;
+  const userBalance = walletBalance ? Number(walletBalance.value) / 10 ** walletBalance.decimals : 0;
+  const insufficientBalance = Number(amount) > userBalance;
+  const canExecute = isConnected && fromToken && toToken && amount && Number(amount) > 0 && !insufficientBalance && !isSending && !isConfirming;
 
   return (
     <div className="max-w-md">
@@ -306,7 +311,9 @@ export function SwapPanel({ initialToToken }: SwapPanelProps): React.ReactNode {
                 ? "Swap Confirmed!"
                 : isDangerous
                   ? "Blocked - Dangerous Token"
-                  : "Execute Swap"}
+                  : insufficientBalance
+                    ? `Insufficient ${fromSymbol} Balance`
+                    : "Execute Swap"}
       </button>
 
       {isConfirmed && txHash && (
