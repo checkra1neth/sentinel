@@ -73,6 +73,24 @@ export class ExecutorAgent extends BaseAgent {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // TX verification — only trust on-chain receipts
+  // -------------------------------------------------------------------------
+
+  private async verifyTx(txHash: string): Promise<boolean> {
+    if (!txHash || txHash === "" || txHash === "undefined") return false;
+    try {
+      const receipt = await this.publicClient.waitForTransactionReceipt({
+        hash: txHash as `0x${string}`,
+        timeout: 30_000,
+      });
+      return receipt.status === "success";
+    } catch (err) {
+      this.log(`TX verification failed for ${txHash}: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+  }
+
   async execute(
     action: string,
     params: Record<string, unknown> = {},
@@ -179,6 +197,19 @@ export class ExecutorAgent extends BaseAgent {
             const data = investResult.data as Record<string, unknown> | null;
             const txHash = String(data?.txHash ?? data?.hash ?? "");
 
+            // Verify TX was actually confirmed on-chain
+            const confirmed = await this.verifyTx(txHash);
+            if (!confirmed) {
+              this.log(`DeFi deposit TX not confirmed on-chain (hash: ${txHash}). Position NOT recorded.`);
+              return {
+                success: false,
+                method: "defi_lp",
+                token,
+                amount: investAmount,
+                error: `TX not confirmed: ${txHash || "no hash returned"}`,
+              };
+            }
+
             const position: LpPosition = {
               token,
               tokenSymbol: sym,
@@ -207,6 +238,7 @@ export class ExecutorAgent extends BaseAgent {
                 apr,
                 range,
                 investmentId,
+                txHash,
               },
             });
 
@@ -245,6 +277,19 @@ export class ExecutorAgent extends BaseAgent {
         const data = swapResult.data as Record<string, unknown> | null;
         const txHash = String(data?.txHash ?? data?.hash ?? "");
 
+        // Verify swap TX was confirmed on-chain
+        const confirmed = await this.verifyTx(txHash);
+        if (!confirmed) {
+          this.log(`Swap TX not confirmed on-chain (hash: ${txHash}). Position NOT recorded.`);
+          return {
+            success: false,
+            method: "swap",
+            token,
+            amount: investAmount,
+            error: `TX not confirmed: ${txHash || "no hash returned"}`,
+          };
+        }
+
         const position: LpPosition = {
           token,
           tokenSymbol: sym,
@@ -268,6 +313,7 @@ export class ExecutorAgent extends BaseAgent {
             token,
             amount: investAmount,
             method: "swap",
+            txHash,
           },
         });
 
@@ -389,6 +435,16 @@ export class ExecutorAgent extends BaseAgent {
     const result = onchainosDefi.redeem(investmentId, this.walletAddress, ratio, config.chainId);
 
     if (result.success) {
+      const data = result.data as Record<string, unknown> | null;
+      const txHash = String(data?.txHash ?? data?.hash ?? "");
+
+      // Verify redeem TX on-chain
+      const confirmed = await this.verifyTx(txHash);
+      if (!confirmed) {
+        this.log(`Redeem TX not confirmed on-chain (hash: ${txHash}). Position NOT removed.`);
+        return { success: false, investmentId, error: `Redeem TX not confirmed: ${txHash || "no hash"}` };
+      }
+
       if (ratio === "1") {
         this.lpPositions = this.lpPositions.filter(
           (p) => p.investmentId !== investmentId,
@@ -400,10 +456,10 @@ export class ExecutorAgent extends BaseAgent {
         agent: this.name,
         type: "invest",
         message: `Exited position ${investmentId} (${Number(ratio) * 100}%)`,
-        details: { investmentId, ratio, data: result.data },
+        details: { investmentId, ratio, txHash },
       });
 
-      return { success: true, investmentId, ratio, data: result.data };
+      return { success: true, investmentId, ratio, txHash };
     }
 
     return { success: false, investmentId, error: "Withdraw failed" };
@@ -444,23 +500,42 @@ export class ExecutorAgent extends BaseAgent {
   // -------------------------------------------------------------------------
 
   private getPortfolio(): PortfolioResult {
-    // Also check on-chain DeFi positions
+    // Use on-chain DeFi positions as source of truth
+    const onChainPositions: LpPosition[] = [];
     try {
       const posResult = onchainosDefi.positions(this.walletAddress);
       if (posResult.success && posResult.data) {
-        this.log(`On-chain positions: ${JSON.stringify(posResult.data).slice(0, 200)}`);
+        const data = posResult.data as Record<string, unknown>;
+        const positionList = (data.positionList ?? data.investmentList ?? []) as Array<Record<string, unknown>>;
+        for (const p of positionList) {
+          onChainPositions.push({
+            token: String(p.tokenAddress ?? p.token ?? ""),
+            tokenSymbol: String(p.tokenSymbol ?? p.symbol ?? ""),
+            poolName: String(p.poolName ?? p.name ?? ""),
+            platformName: String(p.platformName ?? p.platform ?? ""),
+            investmentId: Number(p.investmentId ?? 0),
+            amountInvested: String(p.investAmount ?? p.amountInvested ?? "0"),
+            apr: String(p.apr ?? p.rate ?? "0"),
+            tvl: String(p.tvl ?? "0"),
+            range: Number(p.range ?? 0),
+            timestamp: Number(p.timestamp ?? Date.now()),
+          });
+        }
       }
     } catch {
-      // ignore
+      // on-chain query failed, fall back to verified local positions
     }
 
-    const totalInvested = this.lpPositions.reduce(
+    // Prefer on-chain data; if empty, use local (which only contains verified TXs now)
+    const positions = onChainPositions.length > 0 ? onChainPositions : this.lpPositions;
+
+    const totalInvested = positions.reduce(
       (sum, p) => sum + Number(p.amountInvested),
       0,
     );
 
     return {
-      positions: [...this.lpPositions],
+      positions: [...positions],
       totalInvested,
     };
   }
