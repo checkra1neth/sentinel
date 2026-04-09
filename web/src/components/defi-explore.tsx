@@ -260,17 +260,17 @@ export function DefiExplore(): React.ReactNode {
                     {formatUsd(pool.tvl)}
                   </td>
                   <td className="py-2.5 text-right">
-                    {pool.canDeposit ? (
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/defi/deposit/${pool.investmentId}`)}
-                        className="px-3 py-1 rounded text-[10px] font-semibold bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors cursor-pointer"
-                      >
-                        Deposit
-                      </button>
-                    ) : (
-                      <span className="text-[10px] font-mono text-[#52525b]">APY only</span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const base = `/defi/deposit/${pool.investmentId}`;
+                        const qs = !pool.canDeposit ? `?token=${encodeURIComponent(pool.name)}&chain=${encodeURIComponent(pool.chain)}` : "";
+                        router.push(`${base}${qs}`);
+                      }}
+                      className="px-3 py-1 rounded text-[10px] font-semibold bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors cursor-pointer"
+                    >
+                      Deposit
+                    </button>
                   </td>
                 </tr>
               ))}

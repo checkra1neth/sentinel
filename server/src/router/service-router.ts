@@ -1443,10 +1443,71 @@ export function createServiceRouter(
     }
   });
 
+  router.get("/defi/search-pool", (_req: Request, res: Response): void => {
+    try {
+      const { token, chainId, productGroup, platform } = _req.query;
+      if (!token) { res.status(400).json({ error: "Missing token param" }); return; }
+      const result = onchainosDefi.search(
+        String(token),
+        chainId ? Number(chainId) : 196,
+        String(productGroup ?? "DEX_POOL"),
+        platform ? String(platform) : undefined,
+      );
+      res.json({ success: result.success, data: result.data });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
   router.get("/defi/detail/:investmentId", (_req: Request, res: Response): void => {
     try {
-      const result = onchainosDefi.detail(Number(_req.params.investmentId));
-      res.json({ success: result.success, data: result.data });
+      const id = _req.params.investmentId;
+      const numId = Number(id);
+
+      // If numeric ID — direct detail lookup
+      if (!isNaN(numId) && numId > 0) {
+        const result = onchainosDefi.detail(numId);
+        res.json({ success: result.success, data: result.data });
+        return;
+      }
+
+      // Non-numeric (DefiLlama UUID) — search by token/chain from query params
+      const token = String(_req.query.token ?? "");
+      const chainId = Number(_req.query.chainId ?? 1);
+      const productGroup = String(_req.query.productGroup ?? "DEX_POOL");
+
+      if (!token) {
+        res.status(400).json({ error: "Non-numeric ID requires ?token=SYMBOL&chainId=N" });
+        return;
+      }
+
+      // Search for matching onchainos product
+      const searchResult = onchainosDefi.search(token.split("-")[0], chainId, productGroup);
+      const searchData = searchResult.data as Record<string, unknown> | undefined;
+      const list = (searchData?.list ?? searchData?.products) as Record<string, unknown>[] | undefined;
+
+      if (!Array.isArray(list) || list.length === 0) {
+        res.json({ success: false, error: "No matching product found" });
+        return;
+      }
+
+      // Find best match by name similarity
+      const tokenLower = token.toLowerCase();
+      const match = list.find((p) => {
+        const name = String(p.name ?? "").toLowerCase();
+        return name === tokenLower || name.includes(tokenLower) || tokenLower.includes(name);
+      }) ?? list[0];
+
+      const matchedId = Number(match.investmentId ?? match.id);
+      if (!matchedId) {
+        res.json({ success: false, error: "No investmentId in search result" });
+        return;
+      }
+
+      const result = onchainosDefi.detail(matchedId);
+      // Add the resolved investmentId so frontend can use it
+      const data = result.data as Record<string, unknown> | undefined;
+      res.json({ success: result.success, data: { ...data, resolvedInvestmentId: matchedId } });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }

@@ -396,8 +396,17 @@ export async function fetchDefiProducts(page = 1): Promise<Record<string, unknow
   return data ?? {};
 }
 
-export async function fetchDefiDetail(investmentId: string): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/defi/detail/${investmentId}`);
+export async function fetchDefiDetail(investmentId: string, token?: string, chainId?: number): Promise<Record<string, unknown>> {
+  const qs = token ? `?token=${encodeURIComponent(token)}${chainId ? `&chainId=${chainId}` : ""}` : "";
+  const data = await get<Record<string, unknown>>(`/defi/detail/${investmentId}${qs}`);
+  return data ?? {};
+}
+
+export async function fetchDefiSearch(token: string, chainId?: number, productGroup?: string): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams({ token });
+  if (chainId) qs.set("chainId", String(chainId));
+  if (productGroup) qs.set("productGroup", productGroup);
+  const data = await get<Record<string, unknown>>(`/defi/search-pool?${qs.toString()}`);
   return data ?? {};
 }
 

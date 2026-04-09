@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount, useBalance, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { type Address } from "viem";
@@ -17,8 +17,14 @@ import { TickRangeSelector } from "../../../../components/tick-range-selector";
 
 type Step = "input" | "depositing" | "confirming" | "success" | "error";
 
+const CHAIN_NAME_TO_ID: Record<string, number> = {
+  Ethereum: 1, BNB: 56, Polygon: 137, Arbitrum: 42161, Optimism: 10,
+  Base: 8453, "X Layer": 196, zkSync: 324, Avalanche: 43114, Fantom: 250,
+};
+
 export default function DepositPage(): React.ReactNode {
   const { investmentId } = useParams<{ investmentId: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState("");
@@ -28,17 +34,31 @@ export default function DepositPage(): React.ReactNode {
   const [step, setStep] = useState<Step>("input");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Pool detail
+  // For DefiLlama pools: token name and chain passed as query params
+  const tokenHint = searchParams.get("token") ?? undefined;
+  const chainHint = searchParams.get("chain") ?? undefined;
+  const chainId = chainHint ? CHAIN_NAME_TO_ID[chainHint] : undefined;
+  const isNumericId = /^\d+$/.test(investmentId);
+
+  // Pool detail — pass token/chain hints for non-numeric IDs (DefiLlama UUIDs)
   const { data: detail, isLoading: detailLoading } = useQuery({
-    queryKey: ["defi-detail", investmentId],
-    queryFn: () => fetchDefiDetail(investmentId),
+    queryKey: ["defi-detail", investmentId, tokenHint, chainId],
+    queryFn: () => fetchDefiDetail(investmentId, tokenHint, chainId),
     staleTime: STALE_NORMAL,
   });
 
-  // Prepare (tick info for LP)
+  // Resolved investmentId from search (for DefiLlama pools)
+  const resolvedId = useMemo(() => {
+    if (isNumericId) return investmentId;
+    const data = ((detail as Record<string, unknown>)?.data ?? detail) as Record<string, unknown> | undefined;
+    return data?.resolvedInvestmentId ? String(data.resolvedInvestmentId) : investmentId;
+  }, [detail, investmentId, isNumericId]);
+
+  // Prepare (tick info for LP) — use resolved ID
   const { data: prepareData } = useQuery({
-    queryKey: ["defi-prepare", investmentId],
-    queryFn: () => fetchDefiPrepare(investmentId),
+    queryKey: ["defi-prepare", resolvedId],
+    queryFn: () => fetchDefiPrepare(resolvedId),
+    enabled: /^\d+$/.test(resolvedId),
     staleTime: STALE_NORMAL,
   });
 
@@ -88,7 +108,7 @@ export default function DepositPage(): React.ReactNode {
       }]);
 
       const result = await fetchDefiDepositCalldata({
-        investmentId,
+        investmentId: resolvedId,
         address,
         userInput,
         slippage: (Number(slippage) / 100).toString(),
@@ -117,7 +137,7 @@ export default function DepositPage(): React.ReactNode {
       setStep("error");
       setErrorMsg(err instanceof Error ? err.message : "Deposit failed");
     }
-  }, [isConnected, address, amount, tokenAddr, decimals, investmentId, slippage, isLP, tickLower, tickUpper, sendTransaction]);
+  }, [isConnected, address, amount, tokenAddr, decimals, resolvedId, slippage, isLP, tickLower, tickUpper, sendTransaction]);
 
   // Track TX state
   useEffect(() => {
