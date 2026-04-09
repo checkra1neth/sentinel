@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { sendChatMessage, type ChatResponse } from "../lib/chat-api";
+import { createAgentWallet, type AgentWalletInfo } from "../lib/wallet-api";
 import { ChatMessage } from "./chat-message";
 
 interface Message {
@@ -27,6 +28,12 @@ const QUICK_ACTIONS = [
   { label: "Discover", command: "/discover" },
 ];
 
+/** Format USDT balance from minimal units (6 decimals) to human-readable. */
+function formatUsdtBalance(raw: string): string {
+  const val = Number(raw) / 1e6;
+  return val.toFixed(2);
+}
+
 let msgCounter = 0;
 function nextId(): string {
   msgCounter += 1;
@@ -38,8 +45,28 @@ export function ChatPanel(): React.ReactNode {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agentWallet, setAgentWallet] = useState<AgentWalletInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  /* Initialize agent wallet when user connects MetaMask */
+  useEffect(() => {
+    if (!address) {
+      setAgentWallet(null);
+      return;
+    }
+
+    let cancelled = false;
+    createAgentWallet(address)
+      .then((info) => {
+        if (!cancelled) setAgentWallet(info);
+      })
+      .catch((err) => {
+        console.warn("[chat-panel] Failed to create agent wallet:", err);
+      });
+
+    return () => { cancelled = true; };
+  }, [address]);
 
   /* Auto-scroll to bottom when messages change */
   useEffect(() => {
@@ -106,6 +133,33 @@ export function ChatPanel(): React.ReactNode {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Agent wallet info bar */}
+      {agentWallet && (
+        <div className="flex items-center justify-between px-4 md:px-6 lg:px-10 py-2 border-b border-white/[0.06] bg-white/[0.02]">
+          <div className="flex items-center gap-3 text-xs text-[#a1a1aa]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Agent Wallet
+            </span>
+            <span className="font-mono text-[#71717a]">
+              {agentWallet.agentWallet.slice(0, 6)}...{agentWallet.agentWallet.slice(-4)}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-[#a1a1aa]">
+              Balance: <span className="text-[#fafafa] font-medium">{formatUsdtBalance(agentWallet.balance)} USDT</span>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Fund agent message */}
+      {agentWallet && agentWallet.balance === "0" && (
+        <div className="mx-4 md:mx-6 lg:mx-10 mt-2 px-3 py-2 rounded-lg bg-[#06b6d4]/[0.06] border border-[#06b6d4]/10 text-xs text-[#a1a1aa]">
+          Fund your agent: send USDT to <span className="font-mono text-[#06b6d4]">{agentWallet.depositAddress}</span> on X Layer
+        </div>
+      )}
+
       {/* Messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-10 py-6 space-y-4">
         <div className="mx-auto max-w-[800px] space-y-4">

@@ -8,6 +8,7 @@ import { Router, type Request, type Response } from "express";
 import { parseCommand, getHelpText } from "./command-parser.js";
 import { JobManager } from "../erc8183/job-manager.js";
 import type { BaseAgent } from "../agents/base-agent.js";
+import type { AgenticWallet } from "../wallet/agentic-wallet.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,9 +138,9 @@ function formatDepositResponse(result: Record<string, unknown>): ChatResponse["r
 // Router factory
 // ---------------------------------------------------------------------------
 
-export function createChatRouter(agents: Record<string, BaseAgent>): Router {
+export function createChatRouter(agents: Record<string, BaseAgent>, sentinelWallet?: AgenticWallet): Router {
   const router = Router();
-  const jobManager = new JobManager(agents);
+  const jobManager = new JobManager(agents, sentinelWallet);
 
   router.post("/chat/message", async (req: Request, res: Response): Promise<void> => {
     try {

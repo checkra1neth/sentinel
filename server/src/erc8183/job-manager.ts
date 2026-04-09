@@ -10,6 +10,8 @@ import type { ScannerAgent } from "../agents/scanner-agent.js";
 import { onchainosSwap, onchainosDefi, onchainosPortfolio } from "../lib/onchainos.js";
 import { config } from "../config.js";
 import { submitReputationSignal, getAgentId } from "../erc8004/reputation.js";
+import type { AgenticWallet } from "../wallet/agentic-wallet.js";
+import type { Address } from "viem";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -170,15 +172,47 @@ async function runSecurityScan(
 }
 
 // ---------------------------------------------------------------------------
+// x402 payment config
+// ---------------------------------------------------------------------------
+
+const X402_PAYMENT_AMOUNT = "0.005";  // 0.005 USDT per job
+const X402_PAYMENTS_ENABLED = process.env.SENTINEL_X402_PAYMENTS === "true";
+
+// ---------------------------------------------------------------------------
 // JobManager
 // ---------------------------------------------------------------------------
 
 export class JobManager {
   private jobs = new Map<string, AgentJob>();
   private agents: Record<string, BaseAgent>;
+  private sentinelWallet: AgenticWallet | null;
 
-  constructor(agents: Record<string, BaseAgent>) {
+  constructor(agents: Record<string, BaseAgent>, sentinelWallet?: AgenticWallet) {
     this.agents = agents;
+    this.sentinelWallet = sentinelWallet ?? null;
+  }
+
+  /**
+   * Fire-and-forget x402 micropayment from Sentinel to a provider agent.
+   * Logs on failure but never throws — job result is more important.
+   */
+  private async payProvider(providerAddress: string, jobType: string): Promise<void> {
+    if (!X402_PAYMENTS_ENABLED || !this.sentinelWallet) return;
+
+    try {
+      const success = await this.sentinelWallet.send(
+        X402_PAYMENT_AMOUNT,
+        providerAddress as Address,
+        config.contracts.usdt,
+      );
+      if (success) {
+        console.log(`[x402] Paid ${X402_PAYMENT_AMOUNT} USDT to ${providerAddress} for ${jobType}`);
+      } else {
+        console.warn(`[x402] Payment failed (send returned false) to ${providerAddress} for ${jobType}`);
+      }
+    } catch (err) {
+      console.warn(`[x402] Payment error to ${providerAddress} for ${jobType}:`, err instanceof Error ? err.message : err);
+    }
   }
 
   // ---- Security scan (Guardian) ------------------------------------------
@@ -219,6 +253,14 @@ export class JobManager {
       job.status = "failed";
       job.result = { error: err instanceof Error ? err.message : "Unknown error" };
       job.completedAt = Date.now();
+    }
+
+    // x402 micropayment: Sentinel -> Guardian (fire-and-forget)
+    if (job.status === "completed") {
+      const guardianAddress = guardian?.walletAddress;
+      if (guardianAddress) {
+        this.payProvider(guardianAddress, "security_scan").catch(() => { /* non-critical */ });
+      }
     }
 
     // Submit reputation signal for Guardian (non-blocking, non-critical)
@@ -319,6 +361,14 @@ export class JobManager {
       job.completedAt = Date.now();
     }
 
+    // x402 micropayment: Sentinel -> Operator (fire-and-forget)
+    if (job.status === "completed") {
+      const operatorAddress = operator?.walletAddress;
+      if (operatorAddress) {
+        this.payProvider(operatorAddress, "swap").catch(() => { /* non-critical */ });
+      }
+    }
+
     // Submit reputation signal for Operator (non-blocking, non-critical)
     const operatorAgentId = getAgentId("operator");
     if (operatorAgentId !== undefined) {
@@ -379,6 +429,14 @@ export class JobManager {
       job.status = "failed";
       job.result = { error: err instanceof Error ? err.message : "Unknown error" };
       job.completedAt = Date.now();
+    }
+
+    // x402 micropayment: Sentinel -> Operator for deposit (fire-and-forget)
+    if (job.status === "completed") {
+      const operatorAddress = operator?.walletAddress;
+      if (operatorAddress) {
+        this.payProvider(operatorAddress, "deposit").catch(() => { /* non-critical */ });
+      }
     }
 
     return job;

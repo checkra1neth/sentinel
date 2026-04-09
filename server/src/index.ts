@@ -16,6 +16,7 @@ import { createAgentWallets } from "./wallet/agentic-wallet.js";
 import type { BaseAgent } from "./agents/base-agent.js";
 import { settings } from "./settings.js";
 import { createMetadataRouter } from "./erc8004/metadata-endpoint.js";
+import { createWalletRouter } from "./router/wallet-router.js";
 import { MoltbookPoster } from "./moltbook/moltbook-poster.js";
 
 // ---------------------------------------------------------------------------
@@ -106,11 +107,14 @@ decisionEngine.onEvent((event) => eventBus.emit(event));
 const serviceRouter = createServiceRouter(agents);
 app.use("/api", serviceRouter);
 
-const chatRouter = createChatRouter(agents);
+const chatRouter = createChatRouter(agents, wallets.analyst);
 app.use("/api", chatRouter);
 
 const metadataRouter = createMetadataRouter();
 app.use("/api", metadataRouter);
+
+const walletRouter = createWalletRouter();
+app.use("/api", walletRouter);
 
 // ---------------------------------------------------------------------------
 // 9. Attach WebSocket
