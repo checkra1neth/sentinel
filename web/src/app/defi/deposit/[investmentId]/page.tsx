@@ -92,8 +92,12 @@ export default function DepositPage(): React.ReactNode {
   const tokenSymbol = String(selectedToken?.tokenSymbol ?? "");
   const decimals = Number(selectedToken?.tokenPrecision ?? selectedToken?.decimal ?? 18);
 
-  // Wallet balance
-  const { data: walletBalance } = useBalance({ address });
+  // Wallet balance — native for 0xeee...eee, ERC20 for token address
+  const isNativeToken = !tokenAddr || tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+  const { data: walletBalance } = useBalance({
+    address,
+    token: isNativeToken ? undefined : tokenAddr as Address,
+  });
   const balanceDisplay = walletBalance
     ? `${(Number(walletBalance.value) / 10 ** walletBalance.decimals).toFixed(6)} ${walletBalance.symbol}`
     : "0";
