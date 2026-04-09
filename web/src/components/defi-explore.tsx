@@ -18,7 +18,17 @@ interface Pool {
   apy: number;
   tvl: number;
   productType: string;
+  chain: string;
 }
+
+const CHAIN_MAP: Record<string, string> = {
+  "1": "Ethereum", "56": "BNB", "137": "Polygon", "42161": "Arbitrum",
+  "10": "Optimism", "8453": "Base", "196": "X Layer", "324": "zkSync",
+  "43114": "Avalanche", "250": "Fantom",
+};
+
+// Non-EVM chains to exclude (Solana, Aptos, Sui, Cosmos, etc.)
+const NON_EVM_CHAINS = new Set(["501", "637", "784", "118", "397"]);
 
 const STAKE_KEYWORDS = ["staking", "stake", "marinade", "solayer", "lido", "rocket pool", "jito", "sanctum"];
 const LEND_KEYWORDS = ["aave", "compound", "kamino", "fluid", "morpho", "spark", "yearn", "benqi", "venus", "lending"];
@@ -36,6 +46,7 @@ function inferProductType(name: string, platform: string, explicit: unknown): st
 export function DefiExplore(): React.ReactNode {
   const router = useRouter();
   const [filter, setFilter] = useState<ProductType>("All");
+  const [chainFilter, setChainFilter] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("apy");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -60,22 +71,29 @@ export function DefiExplore(): React.ReactNode {
     const list = dataObj?.list ?? raw?.list ?? raw?.products;
     const products = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
 
-    const mapped: Pool[] = products.map((p) => {
+    const mapped: Pool[] = [];
+    for (const p of products) {
+      const chainIdx = String(p.chainIndex ?? "");
+      if (NON_EVM_CHAINS.has(chainIdx)) continue;
       const name = String(p.name ?? p.poolName ?? "");
       const platform = String(p.platformName ?? p.platform ?? p.protocol ?? "");
-      return {
+      mapped.push({
         investmentId: String(p.investmentId ?? p.id ?? ""),
         name,
         platform,
         apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
         tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
         productType: inferProductType(name, platform, p.investType ?? p.productGroup),
-      };
-    });
+        chain: CHAIN_MAP[chainIdx] ?? chainIdx,
+      });
+    }
 
     const yieldsArr = (yieldsData as Record<string, unknown>)?.pools as Record<string, unknown>[] | undefined;
+    const NON_EVM_YIELD_CHAINS = new Set(["Solana", "Aptos", "Sui", "Cosmos", "Near", "Tron"]);
     if (yieldsArr) {
       for (const y of yieldsArr) {
+        const yChain = String(y.chain ?? "");
+        if (NON_EVM_YIELD_CHAINS.has(yChain)) continue;
         const id = String(y.investmentId ?? y.pool ?? "");
         if (!mapped.some((p) => p.investmentId === id)) {
           mapped.push({
@@ -85,6 +103,7 @@ export function DefiExplore(): React.ReactNode {
             apy: Number(y.apy ?? y.apyBase ?? 0),
             tvl: Number(y.tvlUsd ?? y.tvl ?? 0),
             productType: "DEX_POOL",
+            chain: yChain,
           });
         }
       }
@@ -92,6 +111,11 @@ export function DefiExplore(): React.ReactNode {
 
     return mapped;
   }, [productsData, yieldsData]);
+
+  const availableChains = useMemo(() => {
+    const chains = new Set(pools.map((p) => p.chain).filter(Boolean));
+    return ["All", ...Array.from(chains).sort()];
+  }, [pools]);
 
   const filtered = useMemo(() => {
     let result = pools;
@@ -104,6 +128,10 @@ export function DefiExplore(): React.ReactNode {
       };
       const allowed = typeMap[filter] ?? [];
       result = result.filter((p) => allowed.includes(p.productType));
+    }
+
+    if (chainFilter !== "All") {
+      result = result.filter((p) => p.chain === chainFilter);
     }
 
     if (search.trim()) {
@@ -124,7 +152,7 @@ export function DefiExplore(): React.ReactNode {
     });
 
     return result;
-  }, [pools, filter, search, sortKey, sortDir]);
+  }, [pools, filter, chainFilter, search, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey): void => {
     if (sortKey === key) {
@@ -165,12 +193,30 @@ export function DefiExplore(): React.ReactNode {
         />
       </div>
 
+      {/* Chain filter */}
+      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+        <span className="text-[10px] font-mono text-[#52525b] mr-1">Chain:</span>
+        {availableChains.map((c) => (
+          <button
+            key={c}
+            onClick={() => setChainFilter(c)}
+            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+              chainFilter === c
+                ? "bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20"
+                : "bg-white/[0.04] text-[#52525b] border border-white/[0.06] hover:text-[#a1a1aa]"
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
       {/* Table */}
       {productsLoading ? (
         <SkeletonRows rows={8} columns={6} />
       ) : filtered.length === 0 ? (
         <div className="py-12 text-center text-xs font-mono text-[#52525b]">
-          {search || filter !== "All" ? "No products match your filters" : "No DeFi products available"}
+          {search || filter !== "All" || chainFilter !== "All" ? "No products match your filters" : "No DeFi products available"}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -180,6 +226,7 @@ export function DefiExplore(): React.ReactNode {
                 <th className={thClass} onClick={() => toggleSort("name")}>
                   Pool {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </th>
+                <th className={`${thClass} hidden lg:table-cell`}>Chain</th>
                 <th className={`${thClass} hidden md:table-cell`}>Protocol</th>
                 <th className={`${thClass} hidden sm:table-cell`}>Type</th>
                 <th className={`${thClass} text-right`} onClick={() => toggleSort("apy")}>
@@ -198,6 +245,7 @@ export function DefiExplore(): React.ReactNode {
                   className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
                 >
                   <td className="py-2.5 pr-4 text-[#fafafa]">{pool.name}</td>
+                  <td className="py-2.5 pr-4 text-[#52525b] hidden lg:table-cell">{pool.chain}</td>
                   <td className="py-2.5 pr-4 text-[#a1a1aa] hidden md:table-cell">{pool.platform}</td>
                   <td className="py-2.5 pr-4 hidden sm:table-cell">
                     <TypeBadge type={pool.productType} />
