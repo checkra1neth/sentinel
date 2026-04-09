@@ -4,6 +4,11 @@ export const REFETCH_FAST = 10_000;   // 10s — real-time data
 export const REFETCH_NORMAL = 30_000; // 30s — standard polling
 export const REFETCH_SLOW = 60_000;   // 60s — slow-changing data
 
+// staleTime — how long data is "fresh" (no refetch at all)
+export const STALE_FAST = 10_000;     // 10s — prices, PnL
+export const STALE_NORMAL = 60_000;   // 60s — portfolio, positions
+export const STALE_SLOW = 5 * 60_000; // 5min — approvals, history, leaderboard
+
 async function get<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${API_URL}/api${path}`);
@@ -144,6 +149,33 @@ export async function fetchAnalysis(address: string): Promise<Verdict | null> {
   return data?.verdict ?? null;
 }
 
+/** Fast GoPlus-based security check for swap pre-flight */
+export async function fetchSwapSecurity(address: string, chainId?: number): Promise<Verdict | null> {
+  const qs = chainId ? `?chainId=${chainId}` : "";
+  const data = await get<Record<string, unknown>>(`/swap/security/${address}${qs}`);
+  if (!data) return null;
+  return {
+    token: address,
+    tokenName: "",
+    tokenSymbol: String(data.tokenSymbol ?? ""),
+    riskScore: Number(data.riskScore ?? 50),
+    verdict: String(data.verdict ?? "UNKNOWN") as Verdict["verdict"],
+    isHoneypot: Boolean(data.isHoneypot),
+    hasRug: false,
+    hasMint: false,
+    isProxy: false,
+    buyTax: Number(data.buyTax ?? 0),
+    sellTax: Number(data.sellTax ?? 0),
+    holderConcentration: 0,
+    risks: (data.warnings as string[]) ?? [],
+    priceUsd: 0,
+    marketCap: 0,
+    liquidityUsd: 0,
+    timestamp: Date.now(),
+    holders: Number(data.holderCount ?? 0),
+  };
+}
+
 export async function fetchTokenHolders(address: string, tag?: number): Promise<Record<string, unknown>> {
   const path = tag ? `/token/holders/${address}?tag=${tag}` : `/token/holders/${address}`;
   const data = await get<Record<string, unknown>>(path);
@@ -215,8 +247,9 @@ export async function scanDapp(domain: string): Promise<DappScanResult | null> {
   return get<DappScanResult>(`/security/dapp-scan?domain=${encodeURIComponent(domain)}`);
 }
 
-export async function fetchTokenInfo(address: string): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/token/info/${address}`);
+export async function fetchTokenInfo(address: string, chainId?: number): Promise<Record<string, unknown>> {
+  const qs = chainId ? `?chainId=${chainId}` : "";
+  const data = await get<Record<string, unknown>>(`/token/info/${address}${qs}`);
   return data ?? {};
 }
 
@@ -315,14 +348,31 @@ export async function fetchGas(): Promise<Record<string, unknown>> {
   return data ?? {};
 }
 
-export async function fetchSwapQuote(from: string, to: string, amount: string): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/swap/quote?from=${from}&to=${to}&amount=${encodeURIComponent(amount)}`);
+export async function fetchSwapQuote(from: string, to: string, amount: string, chainId?: number, router?: string, wallet?: string, fromDecimals?: number): Promise<Record<string, unknown>> {
+  const qs = `/swap/quote?from=${from}&to=${to}&amount=${encodeURIComponent(amount)}${chainId ? `&chainId=${chainId}` : ""}${router ? `&router=${router}` : ""}${wallet ? `&wallet=${wallet}` : ""}${fromDecimals ? `&fromDecimals=${fromDecimals}` : ""}`;
+  const data = await get<Record<string, unknown>>(qs);
   return data ?? {};
 }
 
-export async function fetchWalletBalance(token?: string): Promise<Record<string, unknown>> {
-  const path = token ? `/wallet/balance?token=${token}` : "/wallet/balance";
+export async function fetchSwapCalldata(from: string, to: string, amount: string, wallet: string, chainId?: number, slippage?: number, router?: string, fromDecimals?: number): Promise<Record<string, unknown>> {
+  const qs = `/swap/calldata?from=${from}&to=${to}&amount=${encodeURIComponent(amount)}&wallet=${wallet}${chainId ? `&chainId=${chainId}` : ""}${slippage ? `&slippage=${slippage}` : ""}${router ? `&router=${router}` : ""}${fromDecimals ? `&fromDecimals=${fromDecimals}` : ""}`;
+  const data = await get<Record<string, unknown>>(qs);
+  return data ?? {};
+}
+
+export async function fetchWalletBalance(token?: string, chainId?: number): Promise<Record<string, unknown>> {
+  const path = `/wallet/balance?${token ? `token=${token}&` : ""}${chainId ? `chainId=${chainId}` : ""}`;
   const data = await get<Record<string, unknown>>(path);
+  return data ?? {};
+}
+
+export async function fetchTokenBalances(chainId: number): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/wallet/token-balances?chainId=${chainId}`);
+  return data ?? {};
+}
+
+export async function fetchPopularTokens(chainId: number): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/tokens/popular?chainId=${chainId}`);
   return data ?? {};
 }
 
@@ -348,6 +398,50 @@ export async function fetchDefiProducts(page = 1): Promise<Record<string, unknow
 
 export async function fetchDefiDetail(investmentId: string): Promise<Record<string, unknown>> {
   const data = await get<Record<string, unknown>>(`/defi/detail/${investmentId}`);
+  return data ?? {};
+}
+
+export async function fetchDefiPrepare(investmentId: string): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/defi/prepare/${investmentId}`);
+  return data ?? {};
+}
+
+export async function fetchDefiCalculateEntry(params: {
+  investmentId: string;
+  address: string;
+  inputToken: string;
+  amount: string;
+  decimal: number;
+  tickLower?: number;
+  tickUpper?: number;
+}): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams({
+    investmentId: params.investmentId,
+    address: params.address,
+    inputToken: params.inputToken,
+    amount: params.amount,
+    decimal: String(params.decimal),
+  });
+  if (params.tickLower !== undefined) qs.set("tickLower", String(params.tickLower));
+  if (params.tickUpper !== undefined) qs.set("tickUpper", String(params.tickUpper));
+  const data = await get<Record<string, unknown>>(`/defi/calculate-entry?${qs.toString()}`);
+  return data ?? {};
+}
+
+export async function fetchDefiDepositCalldata(params: {
+  investmentId: string;
+  address: string;
+  userInput: string;
+  slippage?: string;
+  tickLower?: number;
+  tickUpper?: number;
+}): Promise<Record<string, unknown>> {
+  const data = await post<Record<string, unknown>>("/defi/deposit", params);
+  return data ?? {};
+}
+
+export async function fetchDefiPositions(address: string, chains = "xlayer"): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/defi/positions/${address}?chains=${chains}`);
   return data ?? {};
 }
 
@@ -411,6 +505,11 @@ export function formatUsd(v: number): string {
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
   if (v >= 1) return `$${v.toFixed(2)}`;
   return `$${v.toFixed(6)}`;
+}
+
+export function formatPercent(v: number): string {
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K%`;
+  return `${v.toFixed(2)}%`;
 }
 
 export function timeAgo(ts: number): string {
