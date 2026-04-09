@@ -16,6 +16,7 @@ import { createAgentWallets } from "./wallet/agentic-wallet.js";
 import type { BaseAgent } from "./agents/base-agent.js";
 import { settings } from "./settings.js";
 import { createMetadataRouter } from "./erc8004/metadata-endpoint.js";
+import { MoltbookPoster } from "./moltbook/moltbook-poster.js";
 
 // ---------------------------------------------------------------------------
 // 1. Express app + http.Server
@@ -148,7 +149,22 @@ const manageLoop = startManageLoop(
 );
 
 // ---------------------------------------------------------------------------
-// 13. Listen
+// 13. Moltbook poster (optional — posts to m/buildx)
+// ---------------------------------------------------------------------------
+
+const moltbookApiKey = process.env.MOLTBOOK_API_KEY;
+const moltbookPoster = moltbookApiKey
+  ? new MoltbookPoster(moltbookApiKey)
+  : null;
+
+if (moltbookPoster) {
+  console.log("[moltbook] Poster enabled — will post to m/buildx");
+} else {
+  console.log("[moltbook] MOLTBOOK_API_KEY not set — poster disabled");
+}
+
+// ---------------------------------------------------------------------------
+// 14. Listen
 // ---------------------------------------------------------------------------
 
 server.listen(config.port, () => {
@@ -163,4 +179,4 @@ server.listen(config.port, () => {
   console.log("");
 });
 
-export { app, server, agents, decisionEngine, eventBus, sentinelLoop, reinvestTask, manageLoop };
+export { app, server, agents, decisionEngine, eventBus, sentinelLoop, reinvestTask, manageLoop, moltbookPoster };
