@@ -29,6 +29,7 @@ export default function DepositPage(): React.ReactNode {
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState("0.5");
+  const [selectedTokenIdx, setSelectedTokenIdx] = useState(0);
   const [tickLower, setTickLower] = useState<number | undefined>();
   const [tickUpper, setTickUpper] = useState<number | undefined>();
   const [step, setStep] = useState<Step>("input");
@@ -75,9 +76,6 @@ export default function DepositPage(): React.ReactNode {
   const platform = String(logoList?.[0]?.tokenName ?? detailInner?.platformName ?? detailInner?.platform ?? "");
   const apy = Number(detailInner?.baseRate ?? detailInner?.rate ?? detailInner?.apy ?? 0) * 100;
   const tvl = Number(detailInner?.tvl ?? 0);
-  const tokenAddr = String(detailInner?.tokenAddress ?? detailInner?.contract ?? baseToken?.tokenAddress ?? "");
-  const tokenSymbol = String(baseToken?.tokenSymbol ?? detailInner?.tokenSymbol ?? detailInner?.symbol ?? "");
-  const decimals = Number(detailInner?.decimal ?? detailInner?.tokenDecimal ?? baseToken?.decimal ?? 18);
   const productType = String(detailInner?.investType ?? detailInner?.productGroup ?? "DEX_POOL");
   const isLP = productType === "DEX_POOL" || poolName.includes("/") || poolName.includes("-");
 
@@ -86,6 +84,13 @@ export default function DepositPage(): React.ReactNode {
   const tickSpacing = Number(prepInner?.tickSpacing ?? 60);
   const currentPrice = Number(prepInner?.currentPrice ?? 0) ||
     (Number(prepInner?.currentTick ?? 0) !== 0 ? Math.pow(1.0001, Number(prepInner?.currentTick)) : 0);
+
+  // Deposit tokens — from prepare.investWithTokenList (preferred) or detail.aboutToken
+  const investTokens = (prepInner?.investWithTokenList ?? aboutTokens ?? []) as Record<string, unknown>[];
+  const selectedToken = investTokens[selectedTokenIdx] ?? investTokens[0] ?? baseToken;
+  const tokenAddr = String(selectedToken?.tokenAddress ?? "");
+  const tokenSymbol = String(selectedToken?.tokenSymbol ?? "");
+  const decimals = Number(selectedToken?.tokenPrecision ?? selectedToken?.decimal ?? 18);
 
   // Wallet balance
   const { data: walletBalance } = useBalance({ address });
@@ -192,7 +197,8 @@ export default function DepositPage(): React.ReactNode {
           <div><span className="text-[#52525b]">Protocol </span><span className="text-[#a1a1aa]">{platform}</span></div>
           <div><span className="text-[#52525b]">APY </span><span className="text-emerald-400">{apy.toFixed(2)}%</span></div>
           <div><span className="text-[#52525b]">TVL </span><span className="text-[#a1a1aa]">{formatUsd(tvl)}</span></div>
-          {tokenSymbol && <div><span className="text-[#52525b]">Token </span><span className="text-[#a1a1aa]">{tokenSymbol}</span></div>}
+          {investTokens.length <= 1 && tokenSymbol && <div><span className="text-[#52525b]">Token </span><span className="text-[#a1a1aa]">{tokenSymbol}</span></div>}
+          {investTokens.length > 1 && <div><span className="text-[#52525b]">Pair </span><span className="text-[#a1a1aa]">{investTokens.map((t) => String(t.tokenSymbol ?? "")).join(" / ")}</span></div>}
         </div>
       </div>
 
@@ -203,9 +209,34 @@ export default function DepositPage(): React.ReactNode {
         </div>
       )}
 
+      {/* Token selector (LP pools have multiple deposit tokens) */}
+      {investTokens.length > 1 && (
+        <div className="border border-white/[0.06] rounded-lg p-5 mb-6">
+          <div className="text-[11px] text-[#52525b] font-mono mb-2">Deposit Token</div>
+          <div className="flex gap-2">
+            {investTokens.map((t, i) => {
+              const sym = String(t.tokenSymbol ?? "");
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelectedTokenIdx(i)}
+                  className={`px-4 py-2 rounded text-xs font-mono font-medium transition-colors cursor-pointer ${
+                    selectedTokenIdx === i
+                      ? "bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20"
+                      : "bg-white/[0.04] text-[#a1a1aa] border border-white/[0.06] hover:text-[#fafafa]"
+                  }`}
+                >
+                  {sym}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Amount input */}
       <div className="border border-white/[0.06] rounded-lg p-5 mb-6">
-        <label className="block text-[11px] text-[#52525b] font-mono mb-2">Deposit Amount</label>
+        <label className="block text-[11px] text-[#52525b] font-mono mb-2">Deposit Amount ({tokenSymbol})</label>
         <input
           type="text"
           inputMode="decimal"
