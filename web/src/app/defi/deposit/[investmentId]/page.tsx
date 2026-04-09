@@ -91,12 +91,17 @@ export default function DepositPage(): React.ReactNode {
   const tokenAddr = String(selectedToken?.tokenAddress ?? "");
   const tokenSymbol = String(selectedToken?.tokenSymbol ?? "");
   const decimals = Number(selectedToken?.tokenPrecision ?? selectedToken?.decimal ?? 18);
+  // Pool's chain from prepare or detail
+  const poolChainId = Number(selectedToken?.chainIndex ?? prepInner?.investWithTokenList?.[0]?.chainIndex ?? detailInner?.chainIndex ?? chainId ?? 0) || undefined;
 
-  // Wallet balance — separate hooks for native and ERC20 to avoid caching issues
+  // Wallet balance — native vs ERC20, with correct chainId for cross-chain
   const isNativeToken = !tokenAddr || tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-  const erc20Addr = !isNativeToken && tokenAddr ? (tokenAddr as Address) : undefined;
-  const { data: nativeBalance } = useBalance({ address });
-  const { data: erc20Balance } = useBalance({ address, token: erc20Addr });
+  const { data: nativeBalance } = useBalance({ address, chainId: poolChainId });
+  const { data: erc20Balance } = useBalance({
+    address,
+    token: !isNativeToken ? (tokenAddr as Address) : undefined,
+    chainId: poolChainId,
+  });
   const walletBalance = isNativeToken ? nativeBalance : erc20Balance;
   const balanceDisplay = walletBalance
     ? `${(Number(walletBalance.value) / 10 ** walletBalance.decimals).toFixed(6)} ${walletBalance.symbol}`
