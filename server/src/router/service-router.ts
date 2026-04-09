@@ -1506,9 +1506,47 @@ export function createServiceRouter(
 
   router.get("/defi/positions/:address", (_req: Request, res: Response): void => {
     try {
-      const chains = String(_req.query.chains ?? "xlayer");
+      const chains = String(_req.query.chains ?? "ethereum,bsc,polygon,arbitrum,base,xlayer,optimism,avalanche");
       const result = onchainosDefi.positions(_req.params.address, chains);
-      res.json({ success: result.success, data: result.data });
+      const data = result.data as Record<string, unknown> | undefined;
+
+      // positions returns summary with walletIdPlatformList — fetch detail for each platform
+      const platformList = data?.walletIdPlatformList as Record<string, unknown>[] | undefined;
+      const allPositions: Record<string, unknown>[] = [];
+
+      if (Array.isArray(platformList)) {
+        for (const plat of platformList) {
+          const totalAssets = Number(plat.totalAssets ?? 0);
+          if (totalAssets <= 0) continue;
+
+          // Each platform may list chains with positions
+          const chainList = plat.chainList as Record<string, unknown>[] | undefined;
+          if (Array.isArray(chainList)) {
+            for (const chain of chainList) {
+              const platformId = String(chain.analysisPlatformId ?? plat.analysisPlatformId ?? "");
+              const chainName = String(chain.chain ?? "");
+              if (!platformId || !chainName) continue;
+
+              const detailResult = onchainosDefi.positionDetail(_req.params.address, Number(chain.chainIndex ?? 1), platformId);
+              const detailData = detailResult.data as Record<string, unknown> | undefined;
+              const investments = detailData?.investments ?? detailData?.tokenList ?? detailData?.list;
+              if (Array.isArray(investments)) {
+                for (const inv of investments as Record<string, unknown>[]) {
+                  allPositions.push({ ...inv, chain: chainName, platformId });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      res.json({
+        success: result.success,
+        data: {
+          ...data,
+          positions: allPositions,
+        },
+      });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }

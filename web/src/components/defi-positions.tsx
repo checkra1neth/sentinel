@@ -51,7 +51,7 @@ export function DefiPositions(): React.ReactNode {
 
   const { data: rawPositions, isLoading } = useQuery({
     queryKey: ["defi-positions", address],
-    queryFn: () => fetchDefiPositions(address!),
+    queryFn: () => fetchDefiPositions(address!, "ethereum,bsc,polygon,arbitrum,base,xlayer,optimism,avalanche"),
     enabled: !!address,
     staleTime: STALE_NORMAL,
     refetchInterval: REFETCH_NORMAL,
