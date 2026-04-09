@@ -19,6 +19,7 @@ interface Pool {
   tvl: number;
   productType: string;
   chain: string;
+  canDeposit: boolean;
 }
 
 const CHAIN_MAP: Record<string, string> = {
@@ -85,6 +86,7 @@ export function DefiExplore(): React.ReactNode {
         tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
         productType: inferProductType(name, platform, p.investType ?? p.productGroup),
         chain: CHAIN_MAP[chainIdx] ?? chainIdx,
+        canDeposit: true,
       });
     }
 
@@ -104,6 +106,7 @@ export function DefiExplore(): React.ReactNode {
             tvl: Number(y.tvlUsd ?? y.tvl ?? 0),
             productType: "DEX_POOL",
             chain: yChain,
+            canDeposit: false,
           });
         }
       }
@@ -257,13 +260,17 @@ export function DefiExplore(): React.ReactNode {
                     {formatUsd(pool.tvl)}
                   </td>
                   <td className="py-2.5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/defi/deposit/${pool.investmentId}`)}
-                      className="px-3 py-1 rounded text-[10px] font-semibold bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors cursor-pointer"
-                    >
-                      Deposit
-                    </button>
+                    {pool.canDeposit ? (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/defi/deposit/${pool.investmentId}`)}
+                        className="px-3 py-1 rounded text-[10px] font-semibold bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors cursor-pointer"
+                      >
+                        Deposit
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-mono text-[#52525b]">APY only</span>
+                    )}
                   </td>
                 </tr>
               ))}

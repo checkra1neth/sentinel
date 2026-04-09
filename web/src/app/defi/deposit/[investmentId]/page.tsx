@@ -42,17 +42,21 @@ export default function DepositPage(): React.ReactNode {
     staleTime: STALE_NORMAL,
   });
 
-  // Unwrap detail
+  // Unwrap detail — onchainos detail has nested structures
   const detailInner = ((detail as Record<string, unknown>)?.data ?? detail) as Record<string, unknown> | undefined;
-  const poolName = String(detailInner?.name ?? detailInner?.poolName ?? "");
-  const platform = String(detailInner?.platformName ?? detailInner?.platform ?? "");
-  const apy = Number(detailInner?.rate ?? detailInner?.apy ?? 0) * (Number(detailInner?.rate ?? 0) < 1 ? 100 : 1);
+  const aboutTokens = detailInner?.aboutToken as Record<string, unknown>[] | undefined;
+  const baseToken = aboutTokens?.[0];
+  const logoList = detailInner?.bottomRightLogoList as Record<string, unknown>[] | undefined;
+
+  const poolName = String(detailInner?.name ?? detailInner?.poolName ?? baseToken?.tokenSymbol ?? "");
+  const platform = String(logoList?.[0]?.tokenName ?? detailInner?.platformName ?? detailInner?.platform ?? "");
+  const apy = Number(detailInner?.baseRate ?? detailInner?.rate ?? detailInner?.apy ?? 0) * 100;
   const tvl = Number(detailInner?.tvl ?? 0);
-  const tokenAddr = String(detailInner?.tokenAddress ?? detailInner?.token ?? "");
-  const tokenSymbol = String(detailInner?.tokenSymbol ?? detailInner?.symbol ?? "");
-  const decimals = Number(detailInner?.decimal ?? detailInner?.tokenDecimal ?? 18);
+  const tokenAddr = String(detailInner?.tokenAddress ?? detailInner?.contract ?? baseToken?.tokenAddress ?? "");
+  const tokenSymbol = String(baseToken?.tokenSymbol ?? detailInner?.tokenSymbol ?? detailInner?.symbol ?? "");
+  const decimals = Number(detailInner?.decimal ?? detailInner?.tokenDecimal ?? baseToken?.decimal ?? 18);
   const productType = String(detailInner?.investType ?? detailInner?.productGroup ?? "DEX_POOL");
-  const isLP = productType === "DEX_POOL";
+  const isLP = productType === "DEX_POOL" || poolName.includes("/") || poolName.includes("-");
 
   // Prepare data
   const prepInner = ((prepareData as Record<string, unknown>)?.data ?? prepareData) as Record<string, unknown> | undefined;
