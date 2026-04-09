@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { DefiTabs, type DefiTab } from "../../components/defi-tabs";
 import { DefiExplore } from "../../components/defi-explore";
+import { DefiPositions } from "../../components/defi-positions";
+import { YieldCalculator } from "../../components/yield-calculator";
 
 export default function DefiPage(): React.ReactNode {
   const [activeTab, setActiveTab] = useState<DefiTab>("Explore");
@@ -15,12 +17,8 @@ export default function DefiPage(): React.ReactNode {
 
       <div className="mt-6">
         {activeTab === "Explore" && <DefiExplore />}
-        {activeTab === "My Positions" && (
-          <div className="py-12 text-center text-xs font-mono text-[#52525b]">Coming soon...</div>
-        )}
-        {activeTab === "Yield Calculator" && (
-          <div className="py-12 text-center text-xs font-mono text-[#52525b]">Coming soon...</div>
-        )}
+        {activeTab === "My Positions" && <DefiPositions />}
+        {activeTab === "Yield Calculator" && <YieldCalculator />}
       </div>
     </div>
   );
