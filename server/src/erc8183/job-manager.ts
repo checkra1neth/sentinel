@@ -9,6 +9,7 @@ import type { BaseAgent } from "../agents/base-agent.js";
 import type { ScannerAgent } from "../agents/scanner-agent.js";
 import { onchainosSwap, onchainosDefi, onchainosPortfolio } from "../lib/onchainos.js";
 import { config } from "../config.js";
+import { submitReputationSignal, getAgentId } from "../erc8004/reputation.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -220,6 +221,25 @@ export class JobManager {
       job.completedAt = Date.now();
     }
 
+    // Submit reputation signal for Guardian (non-blocking, non-critical)
+    const guardianAgentId = getAgentId("guardian");
+    if (guardianAgentId !== undefined) {
+      const riskScore = (job.result as Record<string, unknown>)?.riskScore;
+      const score = job.status === "completed"
+        ? Math.max(0, 100 - Number(riskScore ?? 0))
+        : 0;
+      submitReputationSignal({
+        agentId: guardianAgentId,
+        jobId: job.id,
+        jobType: job.type,
+        success: job.status === "completed",
+        score,
+        details: job.status === "completed"
+          ? `Security scan completed. Verdict: ${(job.result as Record<string, unknown>)?.verdict ?? "UNKNOWN"}`
+          : `Security scan failed: ${(job.result as Record<string, unknown>)?.error ?? "unknown error"}`,
+      }).catch(() => { /* reputation is non-critical */ });
+    }
+
     return job;
   }
 
@@ -297,6 +317,24 @@ export class JobManager {
       job.status = "failed";
       job.result = { error: err instanceof Error ? err.message : "Unknown error" };
       job.completedAt = Date.now();
+    }
+
+    // Submit reputation signal for Operator (non-blocking, non-critical)
+    const operatorAgentId = getAgentId("operator");
+    if (operatorAgentId !== undefined) {
+      const wasBlocked = (job.result as Record<string, unknown>)?.blocked === true;
+      submitReputationSignal({
+        agentId: operatorAgentId,
+        jobId: job.id,
+        jobType: job.type,
+        success: job.status === "completed",
+        score: job.status === "completed" ? 90 : wasBlocked ? 50 : 0,
+        details: job.status === "completed"
+          ? `Swap quote obtained: ${params.from} -> ${params.to}`
+          : wasBlocked
+            ? "Swap blocked by security gate"
+            : `Swap failed: ${(job.result as Record<string, unknown>)?.error ?? "unknown error"}`,
+      }).catch(() => { /* reputation is non-critical */ });
     }
 
     return job;
