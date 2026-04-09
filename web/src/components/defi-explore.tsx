@@ -20,6 +20,19 @@ interface Pool {
   productType: string;
 }
 
+const STAKE_KEYWORDS = ["staking", "stake", "marinade", "solayer", "lido", "rocket pool", "jito", "sanctum"];
+const LEND_KEYWORDS = ["aave", "compound", "kamino", "fluid", "morpho", "spark", "yearn", "benqi", "venus", "lending"];
+const LP_KEYWORDS = ["uniswap", "sushiswap", "pancakeswap", "curve", "balancer", "raydium", "orca"];
+
+function inferProductType(name: string, platform: string, explicit: unknown): string {
+  if (explicit && typeof explicit === "string") return explicit;
+  const combined = `${name} ${platform}`.toLowerCase();
+  if (LP_KEYWORDS.some((k) => combined.includes(k)) || name.includes("/")) return "DEX_POOL";
+  if (STAKE_KEYWORDS.some((k) => combined.includes(k))) return "SINGLE_EARN";
+  if (LEND_KEYWORDS.some((k) => combined.includes(k))) return "LENDING";
+  return "SINGLE_EARN";
+}
+
 export function DefiExplore(): React.ReactNode {
   const router = useRouter();
   const [filter, setFilter] = useState<ProductType>("All");
@@ -47,14 +60,18 @@ export function DefiExplore(): React.ReactNode {
     const list = dataObj?.list ?? raw?.list ?? raw?.products;
     const products = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
 
-    const mapped: Pool[] = products.map((p) => ({
-      investmentId: String(p.investmentId ?? p.id ?? ""),
-      name: String(p.name ?? p.poolName ?? ""),
-      platform: String(p.platformName ?? p.platform ?? p.protocol ?? ""),
-      apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
-      tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
-      productType: String(p.investType ?? p.productGroup ?? p.type ?? "DEX_POOL"),
-    }));
+    const mapped: Pool[] = products.map((p) => {
+      const name = String(p.name ?? p.poolName ?? "");
+      const platform = String(p.platformName ?? p.platform ?? p.protocol ?? "");
+      return {
+        investmentId: String(p.investmentId ?? p.id ?? ""),
+        name,
+        platform,
+        apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
+        tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
+        productType: inferProductType(name, platform, p.investType ?? p.productGroup),
+      };
+    });
 
     const yieldsArr = (yieldsData as Record<string, unknown>)?.pools as Record<string, unknown>[] | undefined;
     if (yieldsArr) {
