@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/defi", label: "DeFi" },
   { href: "/trade", label: "Trade" },
   { href: "/agents", label: "Agents" },
+  { href: "/chat", label: "Chat" },
 ];
 
 export function NavLinks(): React.ReactNode {
