@@ -1,0 +1,13 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "SentinelOrchestrator",
+  "description": "Orchestrator agent for Sentinel Platform on X Layer. Routes user commands to specialized security and execution agents via ERC-8183 escrow with x402 payments.",
+  "services": [
+    {
+      "name": "MCP",
+      "endpoint": "https://sentinel-xlayer.up.railway.app/mcp",
+      "version": "2026-01-29"
+    }
+  ],
+  "supportedTrust": ["reputation"]
+}

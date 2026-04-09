@@ -1,0 +1,18 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "SentinelOperator",
+  "description": "DeFi execution agent for Sentinel Platform on X Layer. Handles token swaps, liquidity provisioning, position management, stop-loss execution, and yield farming across Uniswap V3 pools.",
+  "services": [
+    {
+      "name": "SwapExecution",
+      "endpoint": "https://sentinel-xlayer.up.railway.app/api/service/3/swap",
+      "version": "2026-01-29"
+    },
+    {
+      "name": "LiquidityManagement",
+      "endpoint": "https://sentinel-xlayer.up.railway.app/api/service/3/liquidity",
+      "version": "2026-01-29"
+    }
+  ],
+  "supportedTrust": ["reputation"]
+}

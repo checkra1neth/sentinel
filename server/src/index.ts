@@ -15,6 +15,7 @@ import { eventBus } from "./events/event-bus.js";
 import { createAgentWallets } from "./wallet/agentic-wallet.js";
 import type { BaseAgent } from "./agents/base-agent.js";
 import { settings } from "./settings.js";
+import { createMetadataRouter } from "./erc8004/metadata-endpoint.js";
 
 // ---------------------------------------------------------------------------
 // 1. Express app + http.Server
@@ -106,6 +107,9 @@ app.use("/api", serviceRouter);
 
 const chatRouter = createChatRouter(agents);
 app.use("/api", chatRouter);
+
+const metadataRouter = createMetadataRouter();
+app.use("/api", metadataRouter);
 
 // ---------------------------------------------------------------------------
 // 9. Attach WebSocket

@@ -1,0 +1,18 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "SentinelGuardian",
+  "description": "Security scanning agent for Sentinel Platform on X Layer. Performs token risk analysis, honeypot detection, contract verification, holder concentration checks, and real-time threat monitoring.",
+  "services": [
+    {
+      "name": "SecurityScan",
+      "endpoint": "https://sentinel-xlayer.up.railway.app/api/service/1/scan",
+      "version": "2026-01-29"
+    },
+    {
+      "name": "TokenAnalysis",
+      "endpoint": "https://sentinel-xlayer.up.railway.app/api/service/2/analyze",
+      "version": "2026-01-29"
+    }
+  ],
+  "supportedTrust": ["reputation"]
+}
