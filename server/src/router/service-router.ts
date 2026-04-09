@@ -1481,22 +1481,39 @@ export function createServiceRouter(
         return;
       }
 
-      // Search for matching onchainos product
-      const searchResult = onchainosDefi.search(token.split("-")[0], chainId, productGroup);
-      const searchData = searchResult.data as Record<string, unknown> | undefined;
-      const list = (searchData?.list ?? searchData?.products) as Record<string, unknown>[] | undefined;
+      // Split pair: "WETH-USDC" → ["WETH", "USDC"], normalize WETH→ETH, WBTC→BTC
+      const parts = token.split("-");
+      const normalize = (t: string): string => t.replace(/^W/, "");
+      const searchTerms = [...new Set([
+        ...parts,
+        ...parts.map(normalize),
+      ])].filter(Boolean);
 
-      if (!Array.isArray(list) || list.length === 0) {
-        res.json({ success: false, error: "No matching product found" });
+      // Try each token until we find results
+      let allResults: Record<string, unknown>[] = [];
+      for (const term of searchTerms) {
+        const searchResult = onchainosDefi.search(term, chainId, productGroup);
+        const searchData = searchResult.data as Record<string, unknown> | undefined;
+        const list = (searchData?.list ?? searchData?.products) as Record<string, unknown>[] | undefined;
+        if (Array.isArray(list) && list.length > 0) {
+          allResults = list;
+          break;
+        }
+      }
+
+      if (allResults.length === 0) {
+        res.json({ success: false, error: `No matching product found for ${token} on chain ${chainId}` });
         return;
       }
 
-      // Find best match by name similarity
-      const tokenLower = token.toLowerCase();
-      const match = list.find((p) => {
-        const name = String(p.name ?? "").toLowerCase();
-        return name === tokenLower || name.includes(tokenLower) || tokenLower.includes(name);
-      }) ?? list[0];
+      // Find best match: normalize both names for comparison (WETH↔ETH)
+      const pairNorm = parts.map(normalize).join("-").toLowerCase();
+      const pairNormRev = parts.map(normalize).reverse().join("-").toLowerCase();
+      const match = allResults.find((p) => {
+        const name = String(p.name ?? "").toLowerCase().replace(/\s+/g, "");
+        return name === pairNorm || name === pairNormRev
+          || name.includes(pairNorm) || name.includes(pairNormRev);
+      }) ?? allResults[0];
 
       const matchedId = Number(match.investmentId ?? match.id);
       if (!matchedId) {
@@ -1505,7 +1522,6 @@ export function createServiceRouter(
       }
 
       const result = onchainosDefi.detail(matchedId);
-      // Add the resolved investmentId so frontend can use it
       const data = result.data as Record<string, unknown> | undefined;
       res.json({ success: result.success, data: { ...data, resolvedInvestmentId: matchedId } });
     } catch (error) {

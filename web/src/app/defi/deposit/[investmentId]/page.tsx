@@ -68,7 +68,10 @@ export default function DepositPage(): React.ReactNode {
   const baseToken = aboutTokens?.[0];
   const logoList = detailInner?.bottomRightLogoList as Record<string, unknown>[] | undefined;
 
-  const poolName = String(detailInner?.name ?? detailInner?.poolName ?? baseToken?.tokenSymbol ?? "");
+  const poolName = String(detailInner?.name ?? detailInner?.poolName ?? "") ||
+    (aboutTokens && aboutTokens.length > 1
+      ? aboutTokens.map((t) => String(t.tokenSymbol ?? "")).join("-")
+      : String(baseToken?.tokenSymbol ?? tokenHint ?? ""));
   const platform = String(logoList?.[0]?.tokenName ?? detailInner?.platformName ?? detailInner?.platform ?? "");
   const apy = Number(detailInner?.baseRate ?? detailInner?.rate ?? detailInner?.apy ?? 0) * 100;
   const tvl = Number(detailInner?.tvl ?? 0);
@@ -78,11 +81,11 @@ export default function DepositPage(): React.ReactNode {
   const productType = String(detailInner?.investType ?? detailInner?.productGroup ?? "DEX_POOL");
   const isLP = productType === "DEX_POOL" || poolName.includes("/") || poolName.includes("-");
 
-  // Prepare data
+  // Prepare data — use currentPrice directly (string from API), fallback to tick calculation
   const prepInner = ((prepareData as Record<string, unknown>)?.data ?? prepareData) as Record<string, unknown> | undefined;
-  const currentTick = Number(prepInner?.currentTick ?? prepInner?.tick ?? 0);
   const tickSpacing = Number(prepInner?.tickSpacing ?? 60);
-  const currentPrice = currentTick ? Math.pow(1.0001, currentTick) : 1;
+  const currentPrice = Number(prepInner?.currentPrice ?? 0) ||
+    (Number(prepInner?.currentTick ?? 0) !== 0 ? Math.pow(1.0001, Number(prepInner?.currentTick)) : 0);
 
   // Wallet balance
   const { data: walletBalance } = useBalance({ address });
