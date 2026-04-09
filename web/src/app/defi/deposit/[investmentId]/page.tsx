@@ -92,15 +92,15 @@ export default function DepositPage(): React.ReactNode {
   const tokenSymbol = String(selectedToken?.tokenSymbol ?? "");
   const decimals = Number(selectedToken?.tokenPrecision ?? selectedToken?.decimal ?? 18);
 
-  // Wallet balance — native for 0xeee...eee, ERC20 for token address
+  // Wallet balance — separate hooks for native and ERC20 to avoid caching issues
   const isNativeToken = !tokenAddr || tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-  const { data: walletBalance } = useBalance({
-    address,
-    token: isNativeToken ? undefined : tokenAddr as Address,
-  });
+  const erc20Addr = !isNativeToken && tokenAddr ? (tokenAddr as Address) : undefined;
+  const { data: nativeBalance } = useBalance({ address });
+  const { data: erc20Balance } = useBalance({ address, token: erc20Addr });
+  const walletBalance = isNativeToken ? nativeBalance : erc20Balance;
   const balanceDisplay = walletBalance
     ? `${(Number(walletBalance.value) / 10 ** walletBalance.decimals).toFixed(6)} ${walletBalance.symbol}`
-    : "0";
+    : "—";
 
   // TX hooks
   const { data: txHash, sendTransaction, isPending: isSending, error: sendError, reset: resetSend } = useSendTransaction();
