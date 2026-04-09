@@ -28,9 +28,9 @@ const TOKEN_RE = /[a-zA-Z][a-zA-Z0-9]{0,10}/;
 const AMOUNT_RE = /[\d]+(?:[.,]\d+)?/;
 const PROTOCOL_RE = /[a-zA-Z][a-zA-Z0-9_\- ]{0,30}[a-zA-Z0-9]/;
 
-/** Normalise user input: trim, collapse whitespace, lowercase. */
+/** Normalise user input: trim, strip leading slash, collapse whitespace, lowercase. */
 const normalise = (input: string): string =>
-  input.trim().replace(/\s+/g, " ").toLowerCase();
+  input.trim().replace(/^\//, "").replace(/\s+/g, " ").toLowerCase();
 
 // ---------------------------------------------------------------------------
 // Pattern definitions  (order matters — first match wins)
