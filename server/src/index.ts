@@ -2,6 +2,7 @@ import express from "express";
 import http from "http";
 import { config } from "./config.js";
 import { createServiceRouter } from "./router/service-router.js";
+import { createChatRouter } from "./chat/chat-router.js";
 import { startReinvestScheduler } from "./scheduler/reinvest.js";
 import { startManageLoop } from "./scheduler/manage-loop.js";
 import { startSentinelLoop } from "./scheduler/cron-loop.js";
@@ -102,6 +103,9 @@ decisionEngine.onEvent((event) => eventBus.emit(event));
 
 const serviceRouter = createServiceRouter(agents);
 app.use("/api", serviceRouter);
+
+const chatRouter = createChatRouter(agents);
+app.use("/api", chatRouter);
 
 // ---------------------------------------------------------------------------
 // 9. Attach WebSocket
