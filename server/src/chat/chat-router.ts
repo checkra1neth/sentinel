@@ -267,6 +267,17 @@ export function createChatRouter(agents: Record<string, BaseAgent>): Router {
           break;
         }
 
+        // -- Wallet Lookup (any address) ------------------------------------
+        case "WALLET_LOOKUP": {
+          const addr = command.params.address;
+          const data = await jobManager.getPortfolio(addr);
+          const formatted = data.error
+            ? formatErrorResponse(data, "Failed to look up wallet.")
+            : formatPortfolioResponse(data);
+          response = { success: !data.error, response: formatted };
+          break;
+        }
+
         // -- Discovery ------------------------------------------------------
         case "DISCOVERY": {
           const data = await jobManager.getDiscovery();

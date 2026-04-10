@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PendingApprovals } from "../../components/pending-approvals";
 import { SettingsPanel } from "../../components/settings-panel";
@@ -54,6 +55,9 @@ async function fetchAgentEvents(): Promise<AgentEvent[]> {
 }
 
 export default function AgentsPage(): React.ReactNode {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const { data: agents = [] } = useQuery({
     queryKey: ["agents-list"],
     queryFn: fetchAgentsData,
@@ -75,8 +79,8 @@ export default function AgentsPage(): React.ReactNode {
     refetchInterval: REFETCH_FAST,
   });
 
-  const stats = statsData?.stats ?? null;
-  const eventStats = statsData?.eventStats ?? null;
+  const stats = mounted ? (statsData?.stats ?? null) : null;
+  const eventStats = mounted ? (statsData?.eventStats ?? null) : null;
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
