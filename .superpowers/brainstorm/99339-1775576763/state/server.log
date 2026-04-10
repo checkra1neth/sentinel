@@ -1,5 +1,0 @@
-{"type":"server-started","port":61427,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:61427","screen_dir":"/Users/pavelmackevic/Projects/agentra/.superpowers/brainstorm/99339-1775576763/content","state_dir":"/Users/pavelmackevic/Projects/agentra/.superpowers/brainstorm/99339-1775576763/state"}
-{"type":"screen-added","file":"/Users/pavelmackevic/Projects/agentra/.superpowers/brainstorm/99339-1775576763/content/discover-layout.html"}
-{"type":"screen-added","file":"/Users/pavelmackevic/Projects/agentra/.superpowers/brainstorm/99339-1775576763/content/discover-v2.html"}
-{"type":"screen-added","file":"/Users/pavelmackevic/Projects/agentra/.superpowers/brainstorm/99339-1775576763/content/token-profile.html"}
-{"type":"server-stopped","reason":"idle timeout"}
