@@ -448,7 +448,7 @@ Response: "BLOCKED: Token is DANGEROUS (risk 89/100). Honeypot detected."
 
 | Member | Role |
 |--------|------|
-| Pavel Mackevich | Solo developer — full-stack (Solidity, TypeScript, Next.js) |
+| checkra1n | Solo developer — full-stack (Solidity, TypeScript, Next.js) |
 | Claude Code | AI pair programmer |
 
 ---
