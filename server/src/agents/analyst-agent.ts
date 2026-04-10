@@ -40,6 +40,54 @@ const inspectAbi = [
 const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
 
 // ---------------------------------------------------------------------------
+// Multi-chain support
+// ---------------------------------------------------------------------------
+
+const CHAIN_RPC: Record<number, string> = {
+  1: "https://eth.llamarpc.com",
+  56: "https://bsc-dataseed.binance.org",
+  137: "https://polygon-rpc.com",
+  42161: "https://arb1.arbitrum.io/rpc",
+  10: "https://mainnet.optimism.io",
+  8453: "https://mainnet.base.org",
+  43114: "https://api.avax.network/ext/bc/C/rpc",
+  250: "https://rpc.ftm.tools",
+  324: "https://mainnet.era.zksync.io",
+  59144: "https://rpc.linea.build",
+  534352: "https://rpc.scroll.io",
+};
+
+const CHAIN_DEXSCREENER: Record<number, string> = {
+  1: "ethereum",
+  56: "bsc",
+  137: "polygon",
+  42161: "arbitrum",
+  10: "optimism",
+  8453: "base",
+  43114: "avalanche",
+  196: "xlayer",
+  250: "fantom",
+  324: "zksync",
+  59144: "linea",
+  534352: "scroll",
+};
+
+const CHAIN_DEFILLAMA: Record<number, string> = {
+  1: "Ethereum",
+  56: "BSC",
+  137: "Polygon",
+  42161: "Arbitrum",
+  10: "Optimism",
+  8453: "Base",
+  43114: "Avalanche",
+  196: "X Layer",
+  250: "Fantom",
+  324: "zkSync Era",
+  59144: "Linea",
+  534352: "Scroll",
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -76,14 +124,15 @@ export class AnalystAgent extends BaseAgent {
     action: string,
     params: Record<string, unknown> = {},
   ): Promise<unknown> {
+    const chainId = Number(params.chainId ?? config.chainId);
     switch (action) {
       case "scan":
-        return this.deepScan(params.token as string);
+        return this.deepScan(params.token as string, chainId);
       case "report": {
         const token = params.token as string;
         const existing = verdictStore.getByToken(token);
         if (existing) return existing;
-        return this.deepScan(token);
+        return this.deepScan(token, chainId);
       }
       default:
         throw new Error(`Unknown action: ${action}`);
@@ -94,22 +143,30 @@ export class AnalystAgent extends BaseAgent {
   // Deep scan
   // -------------------------------------------------------------------------
 
-  async deepScan(tokenAddress: string): Promise<Verdict> {
-    this.log(`Deep scan: ${tokenAddress}`);
+  async deepScan(tokenAddress: string, chainId: number = config.chainId): Promise<Verdict> {
+    this.log(`Deep scan: ${tokenAddress} on chain ${chainId}`);
+
+    // Build RPC client for the target chain
+    const rpcUrl = chainId === config.chainId
+      ? config.xlayerRpcUrl
+      : CHAIN_RPC[chainId];
+    const client = rpcUrl
+      ? createPublicClient({ transport: http(rpcUrl) })
+      : this.publicClient;
 
     // 1. Price info
-    const priceResult = onchainosToken.priceInfo(tokenAddress, config.chainId);
+    const priceResult = onchainosToken.priceInfo(tokenAddress, chainId);
     const priceData = (priceResult.success ? priceResult.data : null) as Record<string, unknown> | null;
 
     // 2. Security scan via OnchainOS
-    const secResult = onchainosSecurity.tokenScan(tokenAddress, config.chainId);
+    const secResult = onchainosSecurity.tokenScan(tokenAddress, chainId);
     let securityScan = (secResult.success ? secResult.data : null) as Record<string, unknown> | null;
 
     // 3. Fallback: OKX token security
     if (!securityScan) {
       try {
         securityScan = (await okxTokenSecurity(
-          String(config.chainId),
+          String(chainId),
           tokenAddress,
         )) as Record<string, unknown> | null;
       } catch {
@@ -117,68 +174,74 @@ export class AnalystAgent extends BaseAgent {
       }
     }
 
-    // 4. Dev info — use token-dev-info (real dev rug pull history, not token-details)
-    const devResult = onchainosTrenches.tokenDevInfo(tokenAddress, config.chainId);
-    const devData = (devResult.success ? devResult.data : null) as Record<string, unknown> | null;
-    const devLaunchedInfo = (devData?.devLaunchedInfo ?? null) as Record<string, unknown> | null;
-    const devHoldingInfo = (devData?.devHoldingInfo ?? null) as Record<string, unknown> | null;
+    // 4. Dev info — memepump is X Layer only, skip for other chains
+    let devLaunchedInfo: Record<string, unknown> | null = null;
+    let devHoldingInfo: Record<string, unknown> | null = null;
+    let devTags: Record<string, unknown> | null = null;
 
-    // 4b. Token details (memepump tags, social, market data)
-    const detailsResult = onchainosTrenches.tokenDetails(tokenAddress, config.chainId);
-    const detailsData = (detailsResult.success ? detailsResult.data : null) as Record<string, unknown> | null;
-    const devTags = (detailsData?.tags ?? null) as Record<string, unknown> | null;
+    if (chainId === 196) {
+      const devResult = onchainosTrenches.tokenDevInfo(tokenAddress, chainId);
+      const devData = (devResult.success ? devResult.data : null) as Record<string, unknown> | null;
+      devLaunchedInfo = (devData?.devLaunchedInfo ?? null) as Record<string, unknown> | null;
+      devHoldingInfo = (devData?.devHoldingInfo ?? null) as Record<string, unknown> | null;
+
+      // 4b. Token details (memepump tags, social, market data)
+      const detailsResult = onchainosTrenches.tokenDetails(tokenAddress, chainId);
+      const detailsData = (detailsResult.success ? detailsResult.data : null) as Record<string, unknown> | null;
+      devTags = (detailsData?.tags ?? null) as Record<string, unknown> | null;
+    }
 
     // 5. Advanced info (holder concentration)
-    const advResult = onchainosToken.advancedInfo(tokenAddress, config.chainId);
+    const advResult = onchainosToken.advancedInfo(tokenAddress, chainId);
     const advData = (advResult.success ? advResult.data : null) as Record<string, unknown> | null;
 
     // 6. Bytecode probe via viem readContract
     const [owner, _paused, name, symbol, _decimals, _totalSupply, proxiableUUID] =
       await Promise.all([
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "owner",
           }),
         ),
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "paused",
           }),
         ),
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "name",
           }),
         ),
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "symbol",
           }),
         ),
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "decimals",
           }),
         ),
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "totalSupply",
           }),
         ),
         safeCall(() =>
-          this.publicClient.readContract({
+          client.readContract({
             address: tokenAddress as Address,
             abi: inspectAbi,
             functionName: "proxiableUUID",
@@ -187,7 +250,7 @@ export class AnalystAgent extends BaseAgent {
       ]);
 
     // 7. Liquidity check + Uniswap pool address extraction
-    const liqResult = onchainosToken.liquidity(tokenAddress, config.chainId);
+    const liqResult = onchainosToken.liquidity(tokenAddress, chainId);
     const liqRaw = liqResult.success ? liqResult.data : null;
     let liquidityUsd = 0;
     let uniswapPoolAddress = "";
@@ -400,7 +463,7 @@ export class AnalystAgent extends BaseAgent {
     // --- Source H: Kline candle analysis (volatility + trend) ---
     if (settings.get().analyze.useKline) {
       try {
-        const klineResult = onchainosMarket.kline(tokenAddress, config.chainId);
+        const klineResult = onchainosMarket.kline(tokenAddress, chainId);
         if (klineResult.success && Array.isArray(klineResult.data)) {
           const candles = klineResult.data as Array<{ o: string; h: string; l: string; c: string; vol: string; ts: string }>;
           if (candles.length >= 3) {
@@ -440,26 +503,29 @@ export class AnalystAgent extends BaseAgent {
       } catch { /* kline unavailable */ }
     }
 
-    // --- Source I: Bundle analysis (suspicious bundled txs) ---
-    try {
-      const bundleResult = onchainosTrenches.tokenBundleInfo(tokenAddress);
-      if (bundleResult.success && bundleResult.data) {
-        const bundle = bundleResult.data as Record<string, string>;
-        const totalBundlers = Number(bundle.totalBundlers ?? 0);
-        if (totalBundlers > 5) {
-          risks.push(`bundled_launch(${totalBundlers}_bundlers)`);
-          riskScore += 20;
-        } else if (totalBundlers > 0) {
-          risks.push(`minor_bundling(${totalBundlers}_bundlers)`);
-          riskScore += 5;
+    // --- Source I: Bundle analysis (suspicious bundled txs) — memepump, X Layer only ---
+    if (chainId === 196) {
+      try {
+        const bundleResult = onchainosTrenches.tokenBundleInfo(tokenAddress);
+        if (bundleResult.success && bundleResult.data) {
+          const bundle = bundleResult.data as Record<string, string>;
+          const totalBundlers = Number(bundle.totalBundlers ?? 0);
+          if (totalBundlers > 5) {
+            risks.push(`bundled_launch(${totalBundlers}_bundlers)`);
+            riskScore += 20;
+          } else if (totalBundlers > 0) {
+            risks.push(`minor_bundling(${totalBundlers}_bundlers)`);
+            riskScore += 5;
+          }
         }
-      }
-    } catch { /* bundle info unavailable */ }
+      } catch { /* bundle info unavailable */ }
+    }
 
     // --- Source J: DexScreener pool data ---
     let dexScreenerData: Verdict["dexScreener"] | undefined;
     try {
-      const dexPairs = await getTokenPairs("xlayer", tokenAddress);
+      const dexChain = CHAIN_DEXSCREENER[chainId] ?? "xlayer";
+      const dexPairs = await getTokenPairs(dexChain, tokenAddress);
       if (dexPairs.length > 0) {
         const best = dexPairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0];
         dexScreenerData = {
@@ -513,7 +579,8 @@ export class AnalystAgent extends BaseAgent {
     let defiLlamaApy: number | undefined;
     try {
       const symForLlama = String(priceData?.symbol ?? symbol ?? advData?.symbol ?? "");
-      const llamaPool = await getPoolApy(symForLlama, "X Layer");
+      const llamaChain = CHAIN_DEFILLAMA[chainId] ?? "X Layer";
+      const llamaPool = await getPoolApy(symForLlama, llamaChain);
       if (llamaPool) {
         defiLlamaApy = llamaPool.apy;
         if (llamaPool.apy > 1000) {
@@ -529,8 +596,8 @@ export class AnalystAgent extends BaseAgent {
       const uniQuote = await getUniswapQuote({
         tokenIn: config.contracts.usdt,
         tokenOut: tokenAddress,
-        tokenInChainId: config.chainId,
-        tokenOutChainId: config.chainId,
+        tokenInChainId: chainId,
+        tokenOutChainId: chainId,
         amount: "1000000",
         type: "EXACT_INPUT",
         swapper: this.walletAddress,
@@ -546,7 +613,7 @@ export class AnalystAgent extends BaseAgent {
     // --- Source M: Cluster analysis (rug pull probability) ---
     let clusterData: Record<string, unknown> | null = null;
     try {
-      const clusterResult = onchainosToken.clusterOverview(tokenAddress, config.chainId);
+      const clusterResult = onchainosToken.clusterOverview(tokenAddress, chainId);
       if (clusterResult.success && clusterResult.data) {
         clusterData = clusterResult.data as Record<string, unknown>;
         const rugPullPercent = Number(clusterData.rugPullPercent ?? 0);
@@ -574,7 +641,7 @@ export class AnalystAgent extends BaseAgent {
     // --- Source N: Token holders (smart money / whale presence) ---
     let holderInsight: { smartMoneyCount: number; whaleCount: number; kolCount: number } | null = null;
     try {
-      const holdersResult = onchainosToken.holders(tokenAddress, config.chainId);
+      const holdersResult = onchainosToken.holders(tokenAddress, chainId);
       if (holdersResult.success && Array.isArray(holdersResult.data)) {
         const holderList = holdersResult.data as Array<Record<string, unknown>>;
         // Count tagged holders from top 100
@@ -594,7 +661,7 @@ export class AnalystAgent extends BaseAgent {
     // --- Source O: Top traders PnL ---
     let topTraderAvgPnl: number | null = null;
     try {
-      const traderResult = onchainosToken.topTrader(tokenAddress, config.chainId);
+      const traderResult = onchainosToken.topTrader(tokenAddress, chainId);
       if (traderResult.success && Array.isArray(traderResult.data)) {
         const traders = traderResult.data as Array<Record<string, string>>;
         if (traders.length > 0) {
@@ -633,7 +700,7 @@ export class AnalystAgent extends BaseAgent {
     let defiPool: Verdict["defiPool"] | undefined;
     if (verdictLabel === "SAFE" || verdictLabel === "CAUTION") {
       try {
-        const poolSearch = onchainosDefi.search(tokenSymbol, config.chainId, "DEX_POOL");
+        const poolSearch = onchainosDefi.search(tokenSymbol, chainId, "DEX_POOL");
         if (poolSearch.success && poolSearch.data) {
           const searchData = poolSearch.data as Record<string, unknown>;
           const list = (searchData.list ?? searchData) as Array<Record<string, unknown>>;
@@ -661,6 +728,7 @@ export class AnalystAgent extends BaseAgent {
       token: tokenAddress,
       tokenName,
       tokenSymbol,
+      chainId,
       riskScore,
       verdict: verdictLabel,
       isHoneypot,

@@ -2,9 +2,10 @@
 
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, useWalletClient, useSwitchChain } from "wagmi";
+import { useAccount, useSwitchChain, useConfig } from "wagmi";
+import { getWalletClient } from "@wagmi/core";
 import { encodeFunctionData, type Address } from "viem";
-import { fetchApprovals, truncAddr, REFETCH_SLOW } from "../lib/api";
+import { fetchApprovals, truncAddr, REFETCH_SLOW, STALE_SLOW } from "../lib/api";
 
 const approveAbi = [
   {
@@ -38,6 +39,9 @@ const EXPLORER_TX: Record<number, string> = {
   42161: "https://arbiscan.io/tx/",
   10: "https://optimistic.etherscan.io/tx/",
   8453: "https://basescan.org/tx/",
+  324: "https://explorer.zksync.io/tx/",
+  250: "https://ftmscan.com/tx/",
+  43114: "https://snowtrace.io/tx/",
 };
 
 const EXPLORER_ADDR: Record<number, string> = {
@@ -48,6 +52,9 @@ const EXPLORER_ADDR: Record<number, string> = {
   42161: "https://arbiscan.io/address/",
   10: "https://optimistic.etherscan.io/address/",
   8453: "https://basescan.org/address/",
+  324: "https://explorer.zksync.io/address/",
+  250: "https://ftmscan.com/address/",
+  43114: "https://snowtrace.io/address/",
 };
 
 function timeAgo(ts: number): string {
@@ -71,10 +78,11 @@ export function ApprovalManager(): React.ReactNode {
     queryKey: ["approvals", address],
     queryFn: () => fetchApprovals(address!),
     enabled: isConnected && !!address,
+    staleTime: STALE_SLOW,
     refetchInterval: REFETCH_SLOW,
   });
 
-  const { data: walletClient } = useWalletClient();
+  const wagmiConfig = useConfig();
   const { switchChainAsync } = useSwitchChain();
 
   // Batch queue state
@@ -144,30 +152,34 @@ export function ApprovalManager(): React.ReactNode {
     });
   }, []);
 
-  // Send single revoke TX via walletClient — auto-switches chain
+  // Error state for user feedback
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+
+  // Send single revoke TX — switches chain then gets FRESH walletClient
   const revokeOne = useCallback(
     async (approval: Approval): Promise<string> => {
-      if (!walletClient) throw new Error("Wallet not connected");
+      setRevokeError(null);
 
-      // Switch chain if needed (e.g. approval on Ethereum but wallet on X Layer)
-      const currentChain = walletClient.chain?.id;
-      if (currentChain !== approval.chainIndex) {
-        await switchChainAsync({ chainId: approval.chainIndex });
-      }
+      // Switch chain first if needed
+      await switchChainAsync({ chainId: approval.chainIndex });
+
+      // Get fresh walletClient AFTER chain switch (closure walletClient would be stale)
+      const client = await getWalletClient(wagmiConfig);
+      if (!client) throw new Error("Wallet not connected");
 
       const calldata = encodeFunctionData({
         abi: approveAbi,
         functionName: "approve",
         args: [approval.spender as Address, BigInt(0)],
       });
-      const hash = await walletClient.sendTransaction({
+      const hash = await client.sendTransaction({
         to: approval.tokenAddress as Address,
         data: calldata,
         chain: null,
       });
       return hash;
     },
-    [walletClient, switchChainAsync],
+    [switchChainAsync, wagmiConfig],
   );
 
   // Revoke single
@@ -176,12 +188,16 @@ export function ApprovalManager(): React.ReactNode {
       const approval = approvals[idx];
       if (!approval) return;
       setCurrentIdx(idx);
+      setRevokeError(null);
       try {
         const hash = await revokeOne(approval);
         setLastTxHash(hash);
         setRevokedSet((prev) => new Set([...prev, idx]));
-      } catch {
-        // user rejected
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes("User rejected") && !msg.includes("denied")) {
+          setRevokeError(msg);
+        }
       }
       setCurrentIdx(null);
       refetch();
@@ -203,11 +219,14 @@ export function ApprovalManager(): React.ReactNode {
         const hash = await revokeOne(approval);
         setLastTxHash(hash);
         setRevokedSet((prev) => new Set([...prev, idx]));
-      } catch {
-        // user rejected — pause batch
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         setBatchStatus("paused");
         batchRunning.current = false;
         setCurrentIdx(null);
+        if (!msg.includes("User rejected") && !msg.includes("denied")) {
+          setRevokeError(msg);
+        }
         return;
       }
     }
@@ -412,6 +431,12 @@ export function ApprovalManager(): React.ReactNode {
             </tbody>
           </table>
         </div>
+      )}
+
+      {revokeError && (
+        <p className="mt-2 text-[11px] font-mono text-[#ef4444]">
+          Error: {revokeError}
+        </p>
       )}
 
       {lastTxHash && revokedSet.size > 0 && !isBatching && (

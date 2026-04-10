@@ -10,8 +10,9 @@ import type { ScannerAgent } from "../agents/scanner-agent.js";
 import { onchainosSwap, onchainosDefi, onchainosPortfolio } from "../lib/onchainos.js";
 import { config } from "../config.js";
 import { submitReputationSignal, getAgentId } from "../erc8004/reputation.js";
+import { getUsdtBalance as readUsdtBalance } from "../contracts/client.js";
 import type { AgenticWallet } from "../wallet/agentic-wallet.js";
-import type { Address } from "viem";
+import { parseUnits, type Address } from "viem";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,7 +21,7 @@ import type { Address } from "viem";
 export interface AgentJob {
   id: string;
   type: "security_scan" | "swap" | "deposit" | "withdraw";
-  client: string;      // sentinel wallet address
+  client: string;      // user TEE wallet address
   provider: string;    // guardian or operator wallet address
   params: Record<string, unknown>;
   status: "created" | "processing" | "completed" | "failed";
@@ -172,11 +173,13 @@ async function runSecurityScan(
 }
 
 // ---------------------------------------------------------------------------
-// x402 payment config
+// User-backed provider payment config
 // ---------------------------------------------------------------------------
 
 const X402_PAYMENT_AMOUNT = "0.005";  // 0.005 USDT per job
-const X402_PAYMENTS_ENABLED = process.env.SENTINEL_X402_PAYMENTS === "true";
+const X402_PAYMENTS_ENABLED = process.env.SENTINEL_X402_PAYMENTS !== "false";
+const X402_PAYMENT_AMOUNT_RAW = parseUnits(X402_PAYMENT_AMOUNT, 6);
+const USER_WALLET_REQUIRED_ERROR = "Connect your wallet to provision and fund your personal TEE wallet first.";
 
 // ---------------------------------------------------------------------------
 // JobManager
@@ -185,50 +188,68 @@ const X402_PAYMENTS_ENABLED = process.env.SENTINEL_X402_PAYMENTS === "true";
 export class JobManager {
   private jobs = new Map<string, AgentJob>();
   private agents: Record<string, BaseAgent>;
-  private sentinelWallet: AgenticWallet | null;
 
-  constructor(agents: Record<string, BaseAgent>, sentinelWallet?: AgenticWallet) {
+  constructor(agents: Record<string, BaseAgent>) {
     this.agents = agents;
-    this.sentinelWallet = sentinelWallet ?? null;
   }
 
-  /**
-   * Fire-and-forget x402 micropayment from Sentinel to a provider agent.
-   * Logs on failure but never throws — job result is more important.
-   */
-  private async payProvider(providerAddress: string, jobType: string): Promise<void> {
-    if (!X402_PAYMENTS_ENABLED || !this.sentinelWallet) return;
-
-    try {
-      const success = await this.sentinelWallet.send(
-        X402_PAYMENT_AMOUNT,
-        providerAddress as Address,
-        config.contracts.usdt,
-      );
-      if (success) {
-        console.log(`[x402] Paid ${X402_PAYMENT_AMOUNT} USDT to ${providerAddress} for ${jobType}`);
-      } else {
-        console.warn(`[x402] Payment failed (send returned false) to ${providerAddress} for ${jobType}`);
-      }
-    } catch (err) {
-      console.warn(`[x402] Payment error to ${providerAddress} for ${jobType}:`, err instanceof Error ? err.message : err);
+  private requirePayerWallet(payerWallet?: AgenticWallet): AgenticWallet {
+    if (!payerWallet) {
+      throw new Error(USER_WALLET_REQUIRED_ERROR);
     }
+    return payerWallet;
+  }
+
+  private async ensurePayerBalance(payerWallet: AgenticWallet): Promise<void> {
+    const balance = await readUsdtBalance(payerWallet.address);
+    if (balance < X402_PAYMENT_AMOUNT_RAW) {
+      throw new Error(
+        `Insufficient TEE wallet balance. Fund ${payerWallet.address} with at least ${X402_PAYMENT_AMOUNT} USDT on X Layer.`,
+      );
+    }
+  }
+
+  private async payProvider(
+    providerAddress: string,
+    jobType: string,
+    payerWallet?: AgenticWallet,
+  ): Promise<void> {
+    if (!X402_PAYMENTS_ENABLED) return;
+
+    const wallet = this.requirePayerWallet(payerWallet);
+    await this.ensurePayerBalance(wallet);
+
+    const success = await wallet.send(
+      X402_PAYMENT_AMOUNT,
+      providerAddress as Address,
+      config.contracts.usdt,
+    );
+
+    if (!success) {
+      throw new Error(`Provider payment failed for ${jobType}`);
+    }
+
+    console.log(`[payments] ${wallet.address} paid ${X402_PAYMENT_AMOUNT} USDT to ${providerAddress} for ${jobType}`);
   }
 
   // ---- Security scan (Guardian) ------------------------------------------
 
   async createSecurityJob(
     tokenAddress: string,
+    payerWallet?: AgenticWallet,
     chainId?: number,
   ): Promise<AgentJob> {
     const guardian = this.agents["2"];
     const job = this.createJob("security_scan", {
       tokenAddress,
       chainId: chainId ?? config.chainId,
-    }, guardian?.walletAddress ?? "guardian");
+    }, guardian?.walletAddress ?? "guardian", payerWallet);
 
     try {
       job.status = "processing";
+      if (X402_PAYMENTS_ENABLED) {
+        await this.ensurePayerBalance(this.requirePayerWallet(payerWallet));
+      }
 
       // Try agent-level full scan first; fall back to GoPlus
       let result: Record<string, unknown>;
@@ -247,20 +268,16 @@ export class JobManager {
       }
 
       job.result = result;
+      const guardianAddress = guardian?.walletAddress;
+      if (guardianAddress) {
+        await this.payProvider(guardianAddress, "security_scan", payerWallet);
+      }
       job.status = "completed";
       job.completedAt = Date.now();
     } catch (err) {
       job.status = "failed";
       job.result = { error: err instanceof Error ? err.message : "Unknown error" };
       job.completedAt = Date.now();
-    }
-
-    // x402 micropayment: Sentinel -> Guardian (fire-and-forget)
-    if (job.status === "completed") {
-      const guardianAddress = guardian?.walletAddress;
-      if (guardianAddress) {
-        this.payProvider(guardianAddress, "security_scan").catch(() => { /* non-critical */ });
-      }
     }
 
     // Submit reputation signal for Guardian (non-blocking, non-critical)
@@ -293,13 +310,23 @@ export class JobManager {
     amount: string;
     walletAddress?: string;
     chainId?: number;
+    payerWallet?: AgenticWallet;
   }): Promise<AgentJob> {
     const operator = this.agents["3"];
-    const job = this.createJob("swap", params as Record<string, unknown>, operator?.walletAddress ?? "operator");
+    const job = this.createJob("swap", {
+      from: params.from,
+      to: params.to,
+      amount: params.amount,
+      walletAddress: params.walletAddress,
+      chainId: params.chainId,
+    }, operator?.walletAddress ?? "operator", params.payerWallet);
 
     try {
       job.status = "processing";
       const chainId = params.chainId ?? config.chainId;
+      if (X402_PAYMENTS_ENABLED) {
+        await this.ensurePayerBalance(this.requirePayerWallet(params.payerWallet));
+      }
 
       // Security gate: check target token before quoting
       const isTargetAddress = params.to.startsWith("0x") && params.to.length === 42;
@@ -353,20 +380,16 @@ export class JobManager {
         amount: params.amount,
         chainId,
       };
+      const operatorAddress = operator?.walletAddress;
+      if (operatorAddress) {
+        await this.payProvider(operatorAddress, "swap", params.payerWallet);
+      }
       job.status = "completed";
       job.completedAt = Date.now();
     } catch (err) {
       job.status = "failed";
       job.result = { error: err instanceof Error ? err.message : "Unknown error" };
       job.completedAt = Date.now();
-    }
-
-    // x402 micropayment: Sentinel -> Operator (fire-and-forget)
-    if (job.status === "completed") {
-      const operatorAddress = operator?.walletAddress;
-      if (operatorAddress) {
-        this.payProvider(operatorAddress, "swap").catch(() => { /* non-critical */ });
-      }
     }
 
     // Submit reputation signal for Operator (non-blocking, non-critical)
@@ -396,12 +419,20 @@ export class JobManager {
     amount: string;
     token: string;
     protocol: string;
+    payerWallet?: AgenticWallet;
   }): Promise<AgentJob> {
     const operator = this.agents["3"];
-    const job = this.createJob("deposit", params as Record<string, unknown>, operator?.walletAddress ?? "operator");
+    const job = this.createJob("deposit", {
+      amount: params.amount,
+      token: params.token,
+      protocol: params.protocol,
+    }, operator?.walletAddress ?? "operator", params.payerWallet);
 
     try {
       job.status = "processing";
+      if (X402_PAYMENTS_ENABLED) {
+        await this.ensurePayerBalance(this.requirePayerWallet(params.payerWallet));
+      }
 
       // Search for matching DeFi product
       const searchResult = onchainosDefi.search(params.token, config.chainId, "DEX_POOL", params.protocol);
@@ -423,6 +454,10 @@ export class JobManager {
         protocol: params.protocol,
         message: "DeFi product found. Use deposit calldata endpoint to execute.",
       };
+      const operatorAddress = operator?.walletAddress;
+      if (operatorAddress) {
+        await this.payProvider(operatorAddress, "deposit", params.payerWallet);
+      }
       job.status = "completed";
       job.completedAt = Date.now();
     } catch (err) {
@@ -431,23 +466,15 @@ export class JobManager {
       job.completedAt = Date.now();
     }
 
-    // x402 micropayment: Sentinel -> Operator for deposit (fire-and-forget)
-    if (job.status === "completed") {
-      const operatorAddress = operator?.walletAddress;
-      if (operatorAddress) {
-        this.payProvider(operatorAddress, "deposit").catch(() => { /* non-critical */ });
-      }
-    }
-
     return job;
   }
 
   // ---- Portfolio (direct call) -------------------------------------------
 
   async getPortfolio(walletAddress?: string): Promise<Record<string, unknown>> {
-    const executor = this.agents["3"];
-    const addr = walletAddress ?? executor?.walletAddress;
-    if (!addr) return { error: "No wallet address" };
+    if (!walletAddress) return { error: USER_WALLET_REQUIRED_ERROR };
+
+    const addr = walletAddress;
 
     const allChains = "ethereum,bsc,polygon,optimism,base,arbitrum,xlayer,avalanche,zksync,fantom";
 
@@ -516,12 +543,12 @@ export class JobManager {
     type: AgentJob["type"],
     params: Record<string, unknown>,
     provider: string,
+    payerWallet?: AgenticWallet,
   ): AgentJob {
-    const sentinel = this.agents["1"];
     const job: AgentJob = {
       id: randomUUID(),
       type,
-      client: sentinel?.walletAddress ?? "sentinel",
+      client: payerWallet?.address ?? "anonymous",
       provider,
       params,
       status: "created",

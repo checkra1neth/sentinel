@@ -79,6 +79,7 @@ export interface Verdict {
   token: string;
   tokenName: string;
   tokenSymbol: string;
+  chainId?: number;
   riskScore: number;
   verdict: "SAFE" | "CAUTION" | "DANGEROUS";
   isHoneypot: boolean;
@@ -139,13 +140,15 @@ export async function fetchLeaderboard(timeFrame = "3", sortBy = "1"): Promise<R
 
 // -- Token Profile endpoints --
 
-export async function fetchTokenPairs(address: string): Promise<DexPair[]> {
-  const data = await get<{ pairs?: DexPair[] }>(`/dex/pairs/${address}`);
+export async function fetchTokenPairs(address: string, chainId?: number): Promise<DexPair[]> {
+  const qs = chainId ? `?chain=${chainId}` : "";
+  const data = await get<{ pairs?: DexPair[] }>(`/dex/pairs/${address}${qs}`);
   return data?.pairs ?? [];
 }
 
-export async function fetchAnalysis(address: string): Promise<Verdict | null> {
-  const data = await get<{ verdict?: Verdict }>(`/analyze/${address}`);
+export async function fetchAnalysis(address: string, chainId?: number): Promise<Verdict | null> {
+  const qs = chainId ? `?chain=${chainId}` : "";
+  const data = await get<{ verdict?: Verdict }>(`/analyze/${address}${qs}`);
   return data?.verdict ?? null;
 }
 
@@ -176,29 +179,38 @@ export async function fetchSwapSecurity(address: string, chainId?: number): Prom
   };
 }
 
-export async function fetchTokenHolders(address: string, tag?: number): Promise<Record<string, unknown>> {
-  const path = tag ? `/token/holders/${address}?tag=${tag}` : `/token/holders/${address}`;
-  const data = await get<Record<string, unknown>>(path);
+export async function fetchTokenHolders(address: string, tag?: number, chainId?: number): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams();
+  if (tag) params.set("tag", String(tag));
+  if (chainId) params.set("chain", String(chainId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const data = await get<Record<string, unknown>>(`/token/holders/${address}${qs}`);
   return data ?? {};
 }
 
-export async function fetchTokenCluster(address: string): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/token/cluster/${address}`);
+export async function fetchTokenCluster(address: string, chainId?: number): Promise<Record<string, unknown>> {
+  const qs = chainId ? `?chain=${chainId}` : "";
+  const data = await get<Record<string, unknown>>(`/token/cluster/${address}${qs}`);
   return data ?? {};
 }
 
-export async function fetchTopTraders(address: string): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/token/top-traders/${address}`);
+export async function fetchTopTraders(address: string, chainId?: number): Promise<Record<string, unknown>> {
+  const qs = chainId ? `?chain=${chainId}` : "";
+  const data = await get<Record<string, unknown>>(`/token/top-traders/${address}${qs}`);
   return data ?? {};
 }
 
-export async function fetchTokenTrades(address: string, limit = 100): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/token/trades/${address}?limit=${limit}`);
+export async function fetchTokenTrades(address: string, limit = 100, chainId?: number): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (chainId) params.set("chain", String(chainId));
+  const data = await get<Record<string, unknown>>(`/token/trades/${address}?${params.toString()}`);
   return data ?? {};
 }
 
-export async function fetchClusterHolders(address: string, range = "3"): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/token/cluster-holders/${address}?range=${range}`);
+export async function fetchClusterHolders(address: string, range = "3", chainId?: number): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams({ range });
+  if (chainId) params.set("chain", String(chainId));
+  const data = await get<Record<string, unknown>>(`/token/cluster-holders/${address}?${params.toString()}`);
   return data ?? {};
 }
 
@@ -233,13 +245,15 @@ export interface DappScanResult {
   [key: string]: unknown;
 }
 
-export async function scanToken(address: string): Promise<Verdict | null> {
-  const data = await post<{ verdict?: Verdict }>(`/scan/${address}`);
+export async function scanToken(address: string, chainId?: number): Promise<Verdict | null> {
+  const qs = chainId ? `?chain=${chainId}` : "";
+  const data = await get<{ verdict?: Verdict }>(`/analyze/${address}${qs}`);
   return data?.verdict ?? null;
 }
 
-export async function rescanToken(address: string): Promise<Verdict | null> {
-  const data = await post<{ verdict?: Verdict }>(`/analyze/${address}/rescan`);
+export async function rescanToken(address: string, chainId?: number): Promise<Verdict | null> {
+  const qs = chainId ? `?chain=${chainId}` : "";
+  const data = await post<{ verdict?: Verdict }>(`/analyze/${address}/rescan${qs}`);
   return data?.verdict ?? null;
 }
 
@@ -255,18 +269,22 @@ export async function fetchTokenInfo(address: string, chainId?: number): Promise
 
 // -- Portfolio endpoints --
 
-export async function fetchPortfolioOverview(timeFrame = "7d"): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/portfolio/overview?timeFrame=${timeFrame}`);
+export async function fetchPortfolioOverview(timeFrame = "7d", address?: string): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams({ timeFrame });
+  if (address) qs.set("address", address);
+  const data = await get<Record<string, unknown>>(`/portfolio/overview?${qs.toString()}`);
   return data ?? {};
 }
 
-export async function fetchPortfolioPnl(): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>("/portfolio/pnl");
+export async function fetchPortfolioPnl(address?: string): Promise<Record<string, unknown>> {
+  const qs = address ? `?address=${address}` : "";
+  const data = await get<Record<string, unknown>>(`/portfolio/pnl${qs}`);
   return data ?? {};
 }
 
-export async function fetchManagedPortfolio(): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>("/manage/portfolio");
+export async function fetchManagedPortfolio(address?: string): Promise<Record<string, unknown>> {
+  const qs = address ? `?address=${address}` : "";
+  const data = await get<Record<string, unknown>>(`/manage/portfolio${qs}`);
   return data ?? {};
 }
 
@@ -275,8 +293,9 @@ export async function fetchAgentBalances(): Promise<Record<string, unknown>> {
   return data ?? {};
 }
 
-export async function fetchLpPositions(): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>("/portfolio");
+export async function fetchLpPositions(address?: string): Promise<Record<string, unknown>> {
+  const qs = address ? `?address=${address}` : "";
+  const data = await get<Record<string, unknown>>(`/portfolio${qs}`);
   return data ?? {};
 }
 
@@ -391,8 +410,15 @@ export async function searchTokens(query: string): Promise<Record<string, unknow
   return data?.pairs ?? [];
 }
 
-export async function fetchDefiProducts(page = 1): Promise<Record<string, unknown>> {
-  const data = await get<Record<string, unknown>>(`/defi/products?page=${page}`);
+export async function fetchDefiProducts(page = 1, chain?: number): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams({ page: String(page) });
+  if (chain) qs.set("chain", String(chain));
+  const data = await get<Record<string, unknown>>(`/defi/products?${qs.toString()}`);
+  return data ?? {};
+}
+
+export async function fetchAllDefiProducts(): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>("/defi/products?all=1");
   return data ?? {};
 }
 
@@ -454,6 +480,11 @@ export async function fetchDefiPositions(address: string, chains = "xlayer"): Pr
   return data ?? {};
 }
 
+export async function fetchDefiPositionDetail(address: string, chainId: number, platformId: string): Promise<Record<string, unknown>> {
+  const data = await get<Record<string, unknown>>(`/defi/position-detail/${address}?chainId=${chainId}&platformId=${platformId}`);
+  return data ?? {};
+}
+
 export async function previewInvestment(token: string, amount: string, tokenSymbol: string): Promise<Record<string, unknown>> {
   const data = await post<Record<string, unknown>>("/invest/preview", { token, amount, tokenSymbol });
   return data ?? {};
@@ -464,8 +495,11 @@ export async function executeInvestment(token: string, amount: string, tokenSymb
   return data ?? {};
 }
 
-export async function fetchYields(symbol?: string): Promise<Record<string, unknown>> {
-  const path = symbol ? `/yields?symbol=${encodeURIComponent(symbol)}` : "/yields";
+export async function fetchYields(symbol?: string, chain?: string): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams();
+  if (symbol) qs.set("symbol", symbol);
+  if (chain) qs.set("chain", chain);
+  const path = qs.toString() ? `/yields?${qs.toString()}` : "/yields";
   const data = await get<Record<string, unknown>>(path);
   return data ?? {};
 }

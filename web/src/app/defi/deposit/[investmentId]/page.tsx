@@ -3,8 +3,10 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, useBalance, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
-import { type Address } from "viem";
+import { useAccount, useBalance, useReadContract, useChainId, useConfig, useSwitchChain } from "wagmi";
+import { getWalletClient } from "@wagmi/core";
+import { type Address, erc20Abi, encodeFunctionData, maxUint256, createPublicClient, http as viemHttp } from "viem";
+import * as viemChains from "viem/chains";
 import {
   fetchDefiDetail,
   fetchDefiPrepare,
@@ -27,6 +29,9 @@ export default function DepositPage(): React.ReactNode {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const walletChainId = useChainId();
+  const wagmiConfig = useConfig();
+  const { switchChainAsync } = useSwitchChain();
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState("0.5");
   const [selectedTokenIdx, setSelectedTokenIdx] = useState(0);
@@ -34,6 +39,7 @@ export default function DepositPage(): React.ReactNode {
   const [tickUpper, setTickUpper] = useState<number | undefined>();
   const [step, setStep] = useState<Step>("input");
   const [errorMsg, setErrorMsg] = useState("");
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   // For DefiLlama pools: token name and chain passed as query params
   const tokenHint = searchParams.get("token") ?? undefined;
@@ -88,42 +94,66 @@ export default function DepositPage(): React.ReactNode {
   // Deposit tokens — from prepare.investWithTokenList (preferred) or detail.aboutToken
   const investTokens = (prepInner?.investWithTokenList ?? aboutTokens ?? []) as Record<string, unknown>[];
   const selectedToken = investTokens[selectedTokenIdx] ?? investTokens[0] ?? baseToken;
-  const tokenAddr = String(selectedToken?.tokenAddress ?? "");
+  const tokenAddr = String(selectedToken?.tokenAddress ?? selectedToken?.tokenContractAddress ?? "");
   const tokenSymbol = String(selectedToken?.tokenSymbol ?? "");
   const decimals = Number(selectedToken?.tokenPrecision ?? selectedToken?.decimal ?? 18);
   // Pool's chain from prepare or detail
-  const poolChainId = Number(selectedToken?.chainIndex ?? prepInner?.investWithTokenList?.[0]?.chainIndex ?? detailInner?.chainIndex ?? chainId ?? 0) || undefined;
+  const tokenList = Array.isArray(prepInner?.investWithTokenList) ? prepInner.investWithTokenList as Record<string, unknown>[] : [];
+  const poolChainId = Number(selectedToken?.chainIndex ?? tokenList[0]?.chainIndex ?? detailInner?.chainIndex ?? chainId ?? 0) || undefined;
 
   // Wallet balance — native vs ERC20, with correct chainId for cross-chain
   const isNativeToken = !tokenAddr || tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
   const { data: nativeBalance } = useBalance({ address, chainId: poolChainId });
-  const { data: erc20Balance } = useBalance({
-    address,
-    token: !isNativeToken ? (tokenAddr as Address) : undefined,
+  const { data: erc20BalanceRaw } = useReadContract({
+    address: (!isNativeToken && tokenAddr) ? (tokenAddr as Address) : undefined,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
     chainId: poolChainId,
+    query: { enabled: !isNativeToken && !!address && !!tokenAddr },
   });
-  const walletBalance = isNativeToken ? nativeBalance : erc20Balance;
+  const walletBalance = isNativeToken
+    ? nativeBalance
+    : erc20BalanceRaw !== undefined
+      ? { value: erc20BalanceRaw, decimals, symbol: tokenSymbol }
+      : undefined;
   const balanceDisplay = walletBalance
     ? `${(Number(walletBalance.value) / 10 ** walletBalance.decimals).toFixed(6)} ${walletBalance.symbol}`
     : "—";
 
-  // TX hooks
-  const { data: txHash, sendTransaction, isPending: isSending, error: sendError, reset: resetSend } = useSendTransaction();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+  // Chain map for public client
+  const chainMap: Record<number, Parameters<typeof createPublicClient>[0]["chain"]> = {
+    1: viemChains.mainnet, 137: viemChains.polygon, 56: viemChains.bsc,
+    42161: viemChains.arbitrum, 10: viemChains.optimism, 8453: viemChains.base,
+    324: viemChains.zksync, 250: viemChains.fantom, 43114: viemChains.avalanche,
+  };
 
-  // Handle deposit
+  // Handle deposit — same pattern as swap: walletClient.sendTransaction with chain: null
   const handleDeposit = useCallback(async () => {
     if (!isConnected || !address || !amount || Number(amount) <= 0) return;
     setStep("depositing");
     setErrorMsg("");
+    setTxHash(null);
 
     try {
+      // 0. Switch chain if needed
+      const targetChain = poolChainId ?? 8453;
+      if (walletChainId !== targetChain) {
+        await switchChainAsync({ chainId: targetChain });
+      }
+      const client = await getWalletClient(wagmiConfig);
+      if (!client) throw new Error("Wallet not connected");
+
+      // 1. Build userInput with correct OKX fields
+      const coinAmount = BigInt(Math.floor(Number(amount) * 10 ** decimals)).toString();
       const userInput = JSON.stringify([{
         tokenAddress: tokenAddr,
-        tokenAmount: amount,
-        decimal: String(decimals),
+        coinAmount,
+        tokenPrecision: String(decimals),
+        chainIndex: String(targetChain),
       }]);
 
+      // 2. Get deposit calldata from API
       const result = await fetchDefiDepositCalldata({
         investmentId: resolvedId,
         address,
@@ -134,43 +164,78 @@ export default function DepositPage(): React.ReactNode {
       });
 
       const data = (result?.data ?? result) as Record<string, unknown>;
-      const txData = (data?.tx ?? data?.calldata ?? data) as Record<string, unknown>;
-      const to = String(txData?.to ?? txData?.toAddress ?? "");
-      const calldata = String(txData?.data ?? txData?.callData ?? "");
-      const value = String(txData?.value ?? "0");
+      const dataList = (data?.dataList ?? []) as Record<string, unknown>[];
 
-      if (!to || !calldata) {
-        setStep("error");
-        setErrorMsg("Failed to generate deposit calldata");
-        return;
+      if (dataList.length === 0) {
+        throw new Error("No deposit transactions returned from API");
       }
 
-      sendTransaction({
-        to: to as Address,
-        data: calldata as `0x${string}`,
-        value: BigInt(value),
-      });
-    } catch (err) {
-      setStep("error");
-      setErrorMsg(err instanceof Error ? err.message : "Deposit failed");
-    }
-  }, [isConnected, address, amount, tokenAddr, decimals, resolvedId, slippage, isLP, tickLower, tickUpper, sendTransaction]);
+      // 3. Execute dataList entries in order (may include APPROVE → DEPOSIT)
+      const viemChain = chainMap[targetChain];
+      const pub = viemChain ? createPublicClient({ chain: viemChain, transport: viemHttp() }) : null;
 
-  // Track TX state
-  useEffect(() => {
-    if (isSending) setStep("depositing");
-    if (isConfirming) setStep("confirming");
-    if (isConfirmed) setStep("success");
-    if (sendError) {
-      setStep("error");
-      setErrorMsg(sendError.message.includes("rejected") ? "Transaction rejected" : sendError.message.slice(0, 120));
-    }
-  }, [isSending, isConfirming, isConfirmed, sendError]);
+      for (const txItem of dataList) {
+        const to = String(txItem?.to ?? "");
+        const calldata = String(txItem?.serializedData ?? txItem?.data ?? "");
+        const txValue = String(txItem?.value ?? "0");
+        const callType = String(txItem?.callDataType ?? "");
 
+        if (!to || !calldata) {
+          throw new Error(`Missing tx data for ${callType || "deposit"} step`);
+        }
+
+        // 3a. If APPROVE step and ERC20, check allowance first
+        if (callType === "APPROVE" && !isNativeToken) {
+          try {
+            const currentAllowance = pub ? await pub.readContract({
+              address: tokenAddr as Address,
+              abi: erc20Abi,
+              functionName: "allowance",
+              args: [address, to as Address],
+            }) : BigInt(0);
+            const needed = BigInt(coinAmount);
+            if (currentAllowance >= needed) continue; // skip approve if already sufficient
+          } catch { /* proceed with approve */ }
+        }
+
+        const hash = await client.sendTransaction({
+          to: to as Address,
+          data: calldata as `0x${string}`,
+          value: BigInt(txValue),
+          chain: null,
+        });
+
+        // Wait for confirmation before next step
+        if (pub) {
+          setStep("confirming");
+          await pub.waitForTransactionReceipt({ hash });
+        }
+
+        setTxHash(hash);
+      }
+
+      setStep("success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        setStep("input");
+      } else {
+        setStep("error");
+        setErrorMsg(msg.slice(0, 200));
+      }
+    }
+  }, [isConnected, address, amount, tokenAddr, decimals, poolChainId, walletChainId, switchChainAsync, wagmiConfig, resolvedId, slippage, isLP, tickLower, tickUpper, isNativeToken, chainMap]);
+
+  const currentTick = Number(prepInner?.currentTick ?? 0);
   const handleRangeChange = useCallback((lower: number, upper: number) => {
-    setTickLower(Math.floor(Math.log(lower) / Math.log(1.0001)));
-    setTickUpper(Math.floor(Math.log(upper) / Math.log(1.0001)));
-  }, []);
+    if (currentPrice > 0 && currentTick !== 0) {
+      // Compute tick offsets relative to currentTick using price ratio
+      const lowerOffset = Math.log(lower / currentPrice) / Math.log(1.0001);
+      const upperOffset = Math.log(upper / currentPrice) / Math.log(1.0001);
+      setTickLower(Math.floor((currentTick + lowerOffset) / tickSpacing) * tickSpacing);
+      setTickUpper(Math.ceil((currentTick + upperOffset) / tickSpacing) * tickSpacing);
+    }
+  }, [currentPrice, currentTick, tickSpacing]);
 
   const SLIPPAGES = ["0.1", "0.5", "1", "3"];
 
@@ -251,7 +316,7 @@ export default function DepositPage(): React.ReactNode {
           inputMode="decimal"
           placeholder="0.0"
           value={amount}
-          onChange={(e) => { setAmount(e.target.value); resetSend(); setStep("input"); }}
+          onChange={(e) => { setAmount(e.target.value); setStep("input"); setTxHash(null); }}
           className="w-full bg-white/[0.04] border border-white/[0.06] rounded px-3 py-2.5 text-sm font-mono text-[#fafafa] placeholder:text-[#52525b] outline-none focus:border-[#06b6d4]/40"
         />
         <div className="flex justify-between mt-1.5">
@@ -334,7 +399,7 @@ export default function DepositPage(): React.ReactNode {
 
       {step === "success" && txHash && (
         <p className="text-[11px] font-mono text-emerald-400 text-center mt-3">
-          TX: <a href={`https://www.oklink.com/xlayer/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">{txHash.slice(0, 10)}...{txHash.slice(-6)}</a>
+          TX: <a href={`https://basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">{txHash.slice(0, 10)}...{txHash.slice(-6)}</a>
         </p>
       )}
 
@@ -344,7 +409,7 @@ export default function DepositPage(): React.ReactNode {
 
       {step === "success" && (
         <button
-          onClick={() => router.push("/defi")}
+          onClick={() => router.push("/defi?tab=My Positions")}
           className="w-full mt-3 py-2 rounded text-xs font-mono text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/10 transition-colors cursor-pointer"
         >
           View My Positions &rarr;

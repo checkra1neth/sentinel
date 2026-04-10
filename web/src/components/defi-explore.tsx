@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDefiProducts, fetchYields, formatUsd, REFETCH_SLOW, STALE_NORMAL } from "../lib/api";
+import { fetchAllDefiProducts, fetchYields, formatUsd, REFETCH_SLOW, STALE_NORMAL } from "../lib/api";
 import { TypeBadge } from "./type-badge";
 import { SkeletonRows } from "./skeleton-rows";
 
@@ -29,7 +29,8 @@ const CHAIN_MAP: Record<string, string> = {
 };
 
 // Non-EVM chains to exclude (Solana, Aptos, Sui, Cosmos, etc.)
-const NON_EVM_CHAINS = new Set(["501", "637", "784", "118", "397"]);
+const NON_EVM_CHAINS = new Set(["501", "637", "784", "118", "397", "9745", "747474"]);
+const NON_EVM_YIELD_NAMES = new Set(["Solana", "Aptos", "Sui", "Cosmos", "Near", "Tron", "Ton", "Starknet", "Sei", "Injective", "Osmosis", "Celestia"]);
 
 const STAKE_KEYWORDS = ["staking", "stake", "marinade", "solayer", "lido", "rocket pool", "jito", "sanctum"];
 const LEND_KEYWORDS = ["aave", "compound", "kamino", "fluid", "morpho", "spark", "yearn", "benqi", "venus", "lending"];
@@ -52,63 +53,76 @@ export function DefiExplore(): React.ReactNode {
   const [sortKey, setSortKey] = useState<SortKey>("apy");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // DefiLlama chain name for API filter (only when a specific chain is selected)
+  const yieldsChain = chainFilter !== "All" ? chainFilter : undefined;
+
   const { data: productsData, isLoading: productsLoading } = useQuery({
-    queryKey: ["defi-products"],
-    queryFn: () => fetchDefiProducts(),
+    queryKey: ["defi-products-all"],
+    queryFn: () => fetchAllDefiProducts(),
     staleTime: STALE_NORMAL,
     refetchInterval: REFETCH_SLOW,
   });
 
   const { data: yieldsData } = useQuery({
-    queryKey: ["yields"],
-    queryFn: () => fetchYields(),
+    queryKey: ["yields", yieldsChain],
+    queryFn: () => fetchYields(undefined, yieldsChain),
     staleTime: STALE_NORMAL,
     refetchInterval: REFETCH_SLOW,
   });
 
   const pools = useMemo((): Pool[] => {
-    const raw = productsData as Record<string, unknown> | null;
-    const dataObj = raw?.data as Record<string, unknown> | undefined;
-    const list = dataObj?.list ?? raw?.list ?? raw?.products;
-    const products = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
-
     const mapped: Pool[] = [];
-    for (const p of products) {
-      const chainIdx = String(p.chainIndex ?? "");
-      if (NON_EVM_CHAINS.has(chainIdx)) continue;
-      const name = String(p.name ?? p.poolName ?? "");
-      const platform = String(p.platformName ?? p.platform ?? p.protocol ?? "");
-      mapped.push({
-        investmentId: String(p.investmentId ?? p.id ?? ""),
-        name,
-        platform,
-        apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
-        tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
-        productType: inferProductType(name, platform, p.investType ?? p.productGroup),
-        chain: CHAIN_MAP[chainIdx] ?? chainIdx,
-        canDeposit: true,
-      });
-    }
+    const seenIds = new Set<string>();
 
+    // 1. DefiLlama yields (primary — chain-filtered by API when specific chain selected)
     const yieldsArr = (yieldsData as Record<string, unknown>)?.pools as Record<string, unknown>[] | undefined;
-    const NON_EVM_YIELD_CHAINS = new Set(["Solana", "Aptos", "Sui", "Cosmos", "Near", "Tron"]);
     if (yieldsArr) {
       for (const y of yieldsArr) {
         const yChain = String(y.chain ?? "");
-        if (NON_EVM_YIELD_CHAINS.has(yChain)) continue;
+        if (NON_EVM_YIELD_NAMES.has(yChain)) continue;
         const id = String(y.investmentId ?? y.pool ?? "");
-        if (!mapped.some((p) => p.investmentId === id)) {
-          mapped.push({
-            investmentId: id,
-            name: String(y.name ?? y.symbol ?? ""),
-            platform: String(y.project ?? y.platform ?? ""),
-            apy: Number(y.apy ?? y.apyBase ?? 0),
-            tvl: Number(y.tvlUsd ?? y.tvl ?? 0),
-            productType: "DEX_POOL",
-            chain: yChain,
-            canDeposit: false,
-          });
-        }
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        const name = String(y.name ?? y.symbol ?? "");
+        const platform = String(y.project ?? y.platform ?? "");
+        mapped.push({
+          investmentId: id,
+          name,
+          platform,
+          apy: Number(y.apy ?? y.apyBase ?? 0),
+          tvl: Number(y.tvlUsd ?? y.tvl ?? 0),
+          productType: inferProductType(name, platform, null),
+          chain: yChain,
+          canDeposit: false,
+        });
+      }
+    }
+
+    // 2. OKX products (all pages, supplement)
+    {
+      const raw = productsData as Record<string, unknown> | null;
+      const dataObj = raw?.data as Record<string, unknown> | undefined;
+      const list = dataObj?.list ?? raw?.list ?? raw?.products;
+      for (const p of (Array.isArray(list) ? list : []) as Record<string, unknown>[]) {
+        const chainIdx = String(p.chainIndex ?? "");
+        if (NON_EVM_CHAINS.has(chainIdx)) continue;
+        const chain = CHAIN_MAP[chainIdx] ?? "";
+        if (!chain) continue;
+        const id = String(p.investmentId ?? p.id ?? "");
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        const name = String(p.name ?? p.poolName ?? "");
+        const platform = String(p.platformName ?? p.platform ?? p.protocol ?? "");
+        mapped.push({
+          investmentId: id,
+          name,
+          platform,
+          apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
+          tvl: Number(p.tvl ?? p.totalValueLocked ?? 0),
+          productType: inferProductType(name, platform, p.investType ?? p.productGroup),
+          chain,
+          canDeposit: true,
+        });
       }
     }
 

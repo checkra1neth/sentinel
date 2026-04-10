@@ -100,7 +100,7 @@ export function VerdictCard({ verdict, loading, onRescan }: VerdictCardProps): R
           Full Profile
         </Link>
         <Link
-          href={`/trade?token=${verdict.token}`}
+          href={`/trade?token=${verdict.token}${verdict.chainId ? `&chain=${verdict.chainId}` : ""}`}
           className="px-3 py-1.5 rounded text-[11px] font-medium bg-white/[0.06] text-[#a1a1aa] hover:bg-white/[0.1] hover:text-[#fafafa] transition-colors"
         >
           Trade

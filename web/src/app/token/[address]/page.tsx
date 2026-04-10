@@ -11,29 +11,37 @@ import { TabHolders } from "../../../components/tab-holders";
 import { TabTraders } from "../../../components/tab-traders";
 import { TabSecurity } from "../../../components/tab-security";
 import { TabDevIntel } from "../../../components/tab-dev-intel";
-import { fetchTokenPairs, fetchAnalysis, fetchTokenHolders } from "../../../lib/api";
+import { fetchTokenPairs, fetchAnalysis, fetchTokenHolders, STALE_NORMAL, REFETCH_SLOW } from "../../../lib/api";
 
 export default function TokenProfilePage(): React.ReactNode {
   const params = useParams();
   const address = String(params.address ?? "");
   const [activeTab, setActiveTab] = useState<TokenTab>("Overview");
 
-  const { data: pairs } = useQuery({
-    queryKey: ["dex-pairs", address],
-    queryFn: () => fetchTokenPairs(address),
-    enabled: !!address,
-  });
-
   const { data: verdict } = useQuery({
     queryKey: ["analysis", address],
     queryFn: () => fetchAnalysis(address),
     enabled: !!address,
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
+  });
+
+  const chainId = verdict?.chainId;
+
+  const { data: pairs } = useQuery({
+    queryKey: ["dex-pairs", address, chainId],
+    queryFn: () => fetchTokenPairs(address, chainId),
+    enabled: !!address,
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const { data: holdersData } = useQuery({
-    queryKey: ["holders-hero", address],
-    queryFn: () => fetchTokenHolders(address),
+    queryKey: ["holders-hero", address, chainId],
+    queryFn: () => fetchTokenHolders(address, undefined, chainId),
     enabled: !!address,
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const pair = pairs?.[0];
@@ -55,6 +63,7 @@ export default function TokenProfilePage(): React.ReactNode {
         address={address}
         name={verdict?.tokenName ?? pair?.baseToken?.name ?? ""}
         symbol={verdict?.tokenSymbol ?? pair?.baseToken?.symbol ?? ""}
+        chainId={chainId}
         verdict={verdict?.verdict}
         riskScore={verdict?.riskScore}
         priceUsd={verdict?.priceUsd ?? (pair?.priceUsd ? Number(pair.priceUsd) : undefined)}
@@ -68,9 +77,9 @@ export default function TokenProfilePage(): React.ReactNode {
 
       <TokenTabs active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === "Overview" && <TabOverview address={address} verdict={verdict ?? null} />}
-      {activeTab === "Holders" && <TabHolders address={address} />}
-      {activeTab === "Traders" && <TabTraders address={address} />}
+      {activeTab === "Overview" && <TabOverview address={address} verdict={verdict ?? null} chainId={chainId} />}
+      {activeTab === "Holders" && <TabHolders address={address} chainId={chainId} />}
+      {activeTab === "Traders" && <TabTraders address={address} chainId={chainId} />}
       {activeTab === "Security" && <TabSecurity verdict={verdict ?? null} />}
       {activeTab === "Dev Intel" && <TabDevIntel address={address} />}
     </div>

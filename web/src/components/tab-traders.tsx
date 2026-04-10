@@ -1,17 +1,21 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchTopTraders, fetchTokenTrades, truncAddr, timeAgo, formatUsd } from "../lib/api";
+import { fetchTopTraders, fetchTokenTrades, truncAddr, timeAgo, formatUsd, STALE_NORMAL, REFETCH_SLOW } from "../lib/api";
 
-export function TabTraders({ address }: { address: string }): React.ReactNode {
+export function TabTraders({ address, chainId }: { address: string; chainId?: number }): React.ReactNode {
   const { data: tradersData } = useQuery({
-    queryKey: ["traders-full", address],
-    queryFn: () => fetchTopTraders(address),
+    queryKey: ["traders-full", address, chainId],
+    queryFn: () => fetchTopTraders(address, chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const { data: tradesData } = useQuery({
-    queryKey: ["trades", address],
-    queryFn: () => fetchTokenTrades(address, 20),
+    queryKey: ["trades", address, chainId],
+    queryFn: () => fetchTokenTrades(address, 20, chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const traders = Array.isArray(tradersData?.data) ? (tradersData.data as Record<string, unknown>[]) : [];
@@ -19,45 +23,46 @@ export function TabTraders({ address }: { address: string }): React.ReactNode {
 
   return (
     <div className="py-5 space-y-6">
-      <div>
-        <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Top Traders</div>
-        <table className="w-full text-[11px] font-mono">
-          <thead>
-            <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
-              <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Total PnL</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Realized</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Unrealized</th>
-              <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Hold %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {traders.map((t, i) => {
-              const totalPnl = Number(t.totalPnlUsd ?? t.realizedPnlUsd ?? 0);
-              const realized = Number(t.realizedPnlUsd ?? 0);
-              const unrealized = Number(t.unrealizedPnlUsd ?? 0);
-              return (
-                <tr key={i} className="border-b border-white/[0.03]">
-                  <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? ""))}</td>
-                  <td className={`py-1.5 text-right ${totalPnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
-                    {totalPnl >= 0 ? "+" : ""}${Math.abs(totalPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </td>
-                  <td className={`py-1.5 text-right hidden sm:table-cell ${realized >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
-                    {realized >= 0 ? "+" : ""}${Math.abs(realized).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </td>
-                  <td className={`py-1.5 text-right hidden sm:table-cell ${unrealized >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
-                    {unrealized >= 0 ? "+" : ""}${Math.abs(unrealized).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </td>
-                  <td className="py-1.5 text-right text-[#a1a1aa]">
-                    {t.holdPercent ? `${Number(t.holdPercent).toFixed(2)}%` : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-            {traders.length === 0 && <tr><td colSpan={5} className="py-4 text-[#52525b]">No trader data.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      {traders.length > 0 && (
+        <div>
+          <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Top Traders</div>
+          <table className="w-full text-[11px] font-mono">
+            <thead>
+              <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
+                <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
+                <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Total PnL</th>
+                <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Realized</th>
+                <th className="pb-1.5 font-medium text-[10px] uppercase text-right hidden sm:table-cell">Unrealized</th>
+                <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Hold %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {traders.map((t, i) => {
+                const totalPnl = Number(t.totalPnlUsd ?? t.realizedPnlUsd ?? 0);
+                const realized = Number(t.realizedPnlUsd ?? 0);
+                const unrealized = Number(t.unrealizedPnlUsd ?? 0);
+                return (
+                  <tr key={i} className="border-b border-white/[0.03]">
+                    <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? ""))}</td>
+                    <td className={`py-1.5 text-right ${totalPnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                      {totalPnl >= 0 ? "+" : ""}${Math.abs(totalPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
+                    <td className={`py-1.5 text-right hidden sm:table-cell ${realized >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                      {realized >= 0 ? "+" : ""}${Math.abs(realized).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
+                    <td className={`py-1.5 text-right hidden sm:table-cell ${unrealized >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                      {unrealized >= 0 ? "+" : ""}${Math.abs(unrealized).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
+                    <td className="py-1.5 text-right text-[#a1a1aa]">
+                      {t.holdPercent ? `${Number(t.holdPercent).toFixed(2)}%` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div>
         <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Recent Trades</div>
         <table className="w-full text-[11px] font-mono">

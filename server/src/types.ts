@@ -192,6 +192,7 @@ export interface Verdict {
   token: string;
   tokenName: string;
   tokenSymbol: string;
+  chainId?: number;
   riskScore: number;
   verdict: "SAFE" | "CAUTION" | "DANGEROUS";
   isHoneypot: boolean;

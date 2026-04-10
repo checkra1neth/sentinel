@@ -8,10 +8,26 @@ const VERDICT_STYLE: Record<string, string> = {
   DANGEROUS: "text-[#ef4444] bg-[rgba(239,68,68,0.08)]",
 };
 
+const CHAIN_NAMES: Record<number, string> = {
+  1: "Ethereum",
+  56: "BNB Chain",
+  137: "Polygon",
+  42161: "Arbitrum",
+  10: "Optimism",
+  8453: "Base",
+  43114: "Avalanche",
+  196: "X Layer",
+  250: "Fantom",
+  324: "zkSync Era",
+  59144: "Linea",
+  534352: "Scroll",
+};
+
 interface TokenHeroProps {
   address: string;
   name: string;
   symbol: string;
+  chainId?: number;
   verdict?: "SAFE" | "CAUTION" | "DANGEROUS";
   riskScore?: number;
   priceUsd?: number;
@@ -57,7 +73,7 @@ export function TokenHero(props: TokenHeroProps): React.ReactNode {
         )}
       </div>
       <div className="text-[11px] text-[#52525b] font-mono mb-3">
-        {props.address} &bull; X Layer
+        {props.address} &bull; {CHAIN_NAMES[props.chainId ?? 196] ?? "Unknown"}
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         {metrics.map((m) => (

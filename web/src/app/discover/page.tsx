@@ -12,6 +12,8 @@ import {
   fetchWhaleSignals,
   fetchTrending,
   fetchVerdicts,
+  STALE_FAST,
+  STALE_NORMAL,
 } from "../../lib/api";
 
 function mapSource(tracker: string): DiscoverToken["source"] {
@@ -51,24 +53,28 @@ export default function DiscoverPage(): React.ReactNode {
   const { data: scannerTokens } = useQuery({
     queryKey: ["discover-feed"],
     queryFn: fetchDiscoverFeed,
+    staleTime: STALE_FAST,
     refetchInterval: 15_000,
   });
 
   const { data: whaleSignals } = useQuery({
     queryKey: ["discover-whales"],
     queryFn: fetchWhaleSignals,
+    staleTime: STALE_FAST,
     refetchInterval: 15_000,
   });
 
   const { data: trending } = useQuery({
     queryKey: ["discover-trending"],
     queryFn: fetchTrending,
+    staleTime: STALE_NORMAL,
     refetchInterval: 30_000,
   });
 
   const { data: verdicts } = useQuery({
     queryKey: ["verdicts"],
     queryFn: () => fetchVerdicts(50),
+    staleTime: STALE_FAST,
     refetchInterval: 15_000,
   });
 
@@ -97,21 +103,20 @@ export default function DiscoverPage(): React.ReactNode {
       });
     }
 
-    // 2. Whale/Smart Money/KOL signals — nested token object, have price + mcap
+    // 2. Whale/Smart Money/KOL signals — tracker activities have tokenPrice/marketCap at top level
     for (const s of whaleSignals ?? []) {
       const tok = s.token as Record<string, unknown> | undefined;
-      const addr = String(tok?.tokenAddress ?? s.tokenContractAddress ?? s.address ?? "").toLowerCase();
+      const addr = String(s.tokenContractAddress ?? tok?.tokenAddress ?? s.tokenAddress ?? s.address ?? "").toLowerCase();
       if (!addr || addr === "undefined" || addr === "") continue;
       const existing = byAddr.get(addr);
-      const ts = Number(s.timestamp ?? s.blockTimestamp ?? Date.now());
+      const ts = Number(s.tradeTime ?? s.timestamp ?? s.blockTimestamp ?? Date.now());
       byAddr.set(addr, {
         ...(existing ?? { token: addr, timestamp: ts }),
         token: addr,
-        tokenSymbol: String(tok?.symbol ?? existing?.tokenSymbol ?? ""),
+        tokenSymbol: String(s.tokenSymbol ?? tok?.symbol ?? existing?.tokenSymbol ?? ""),
         tokenName: String(tok?.name ?? existing?.tokenName ?? ""),
-        priceUsd: Number(s.price ?? existing?.priceUsd ?? 0) || undefined,
-        marketCap: Number(tok?.marketCapUsd ?? existing?.marketCap ?? 0) || undefined,
-        // Keep verdict data if already exists, only override source
+        priceUsd: Number(s.tokenPrice ?? s.price ?? existing?.priceUsd ?? 0) || undefined,
+        marketCap: Number(s.marketCap ?? tok?.marketCapUsd ?? existing?.marketCap ?? 0) || undefined,
         riskScore: existing?.riskScore,
         verdict: existing?.verdict,
         priceChange24h: existing?.priceChange24h,
@@ -123,20 +128,27 @@ export default function DiscoverPage(): React.ReactNode {
       });
     }
 
-    // 3. Scanner feed — only ADD tokens not already present (no data to override)
+    // 3. Scanner feed — enriched with market data from backend
     for (const t of scannerTokens ?? []) {
-      const addr = String(t.token ?? t.address ?? t.tokenContractAddress ?? "").toLowerCase();
-      if (!addr || byAddr.has(addr)) continue;
-      const name = String(t.tokenSymbol ?? t.symbol ?? t.name ?? "");
+      const addr = String(t.address ?? t.token ?? t.tokenContractAddress ?? "").toLowerCase();
+      if (!addr) continue;
+      const existing = byAddr.get(addr);
+      const name = String(t.symbol ?? t.tokenSymbol ?? t.name ?? "");
       byAddr.set(addr, {
+        ...(existing ?? { token: addr, timestamp: Number(t.timestamp ?? Date.now()) }),
         token: addr,
-        tokenSymbol: name,
-        tokenName: String(t.tokenName ?? t.name ?? name),
-        priceUsd: Number(t.priceUsd ?? t.price ?? 0) || undefined,
-        marketCap: Number(t.marketCap ?? 0) || undefined,
-        liquidityUsd: Number(t.liquidityUsd ?? t.liquidity ?? 0) || undefined,
-        source: "SCANNER",
-        timestamp: Number(t.timestamp ?? Date.now()),
+        tokenSymbol: name || existing?.tokenSymbol,
+        tokenName: String(t.name ?? t.tokenName ?? name) || existing?.tokenName,
+        priceUsd: Number(t.priceUsd ?? t.price ?? 0) || existing?.priceUsd,
+        priceChange24h: Number(t.priceChange24h ?? t.change ?? 0) || existing?.priceChange24h,
+        marketCap: Number(t.marketCap ?? 0) || existing?.marketCap,
+        liquidityUsd: Number(t.liquidityUsd ?? t.liquidity ?? 0) || existing?.liquidityUsd,
+        volume24h: Number(t.volume24h ?? t.volume ?? 0) || existing?.volume24h,
+        riskScore: existing?.riskScore,
+        verdict: existing?.verdict,
+        smartMoneyCount: existing?.smartMoneyCount,
+        source: existing?.source ?? "SCANNER",
+        timestamp: existing?.timestamp ?? Number(t.timestamp ?? Date.now()),
       });
     }
 

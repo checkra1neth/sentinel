@@ -81,7 +81,8 @@ export function createServiceRouter(
           res.status(503).json({ error: "Analyst agent not available" });
           return;
         }
-        const result = await analyst.execute("scan", { token });
+        const chainId = req.query.chain ? Number(req.query.chain) : undefined;
+        const result = await analyst.execute("scan", { token, chainId });
         res.json({ verdict: result });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
@@ -124,28 +125,43 @@ export function createServiceRouter(
   // -------------------------------------------------------------------------
 
   router.get("/portfolio", (_req: Request, res: Response): void => {
-    const executor = agents["3"] as ExecutorAgent | undefined;
-    if (!executor) {
-      res.status(503).json({ error: "Executor agent not available" });
-      return;
+    try {
+      const executor = agents["3"] as ExecutorAgent | undefined;
+      const walletAddr = _req.query.address ? String(_req.query.address) : executor?.walletAddress;
+      if (!walletAddr) { res.status(503).json({ error: "No wallet address" }); return; }
+      const allChains = "ethereum,bsc,polygon,optimism,base,arbitrum,xlayer,avalanche,zksync,fantom";
+
+      const posResult = onchainosDefi.positions(walletAddr, allChains);
+      const posData = posResult.data as Record<string, unknown> | undefined;
+      const account = (posData?.walletIdPlatformList as Record<string, unknown>[] | undefined)?.[0];
+      const platformList = (account?.platformList ?? []) as Record<string, unknown>[];
+
+      // Flatten to positions with >$0.01 value
+      const positions = platformList
+        .filter((p) => Number(p.currencyAmount ?? 0) > 0.01)
+        .map((p) => ({
+          platformName: String(p.platformName ?? ""),
+          platformLogo: String(p.platformLogo ?? ""),
+          amountInvested: String(p.currencyAmount ?? "0"),
+          investmentCount: Number(p.investmentCount ?? 0),
+          networks: ((p.networkBalanceList ?? []) as Record<string, unknown>[]).map((n) => ({
+            chain: String(n.network ?? ""),
+            chainIndex: String(n.chainIndex ?? ""),
+            value: String(n.currencyAmount ?? "0"),
+          })),
+        }))
+        .sort((a, b) => Number(b.amountInvested) - Number(a.amountInvested));
+
+      const totalInvested = positions.reduce((sum, p) => sum + Number(p.amountInvested), 0);
+
+      res.json({
+        positions,
+        totalInvested,
+        totalPositions: positions.reduce((sum, p) => sum + p.investmentCount, 0),
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
-
-    const positions = executor.lpPositions;
-    const totalInvested = positions.reduce(
-      (sum, p) => sum + Number(p.amountInvested),
-      0,
-    );
-    const totalApr = positions.length > 0
-      ? positions.reduce((sum, p) => sum + Number(p.apr ?? 0), 0) / positions.length
-      : 0;
-
-    res.json({
-      positions,
-      totalInvested,
-      totalPositions: positions.length,
-      avgApr: totalApr,
-      executorAddress: executor.walletAddress,
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -204,7 +220,10 @@ export function createServiceRouter(
 
   router.get("/dex/pairs/:token", async (req: Request, res: Response): Promise<void> => {
     try {
-      const pairs = await getTokenPairs("xlayer", req.params.token);
+      const dexChainMap: Record<string, string> = { "1": "ethereum", "56": "bsc", "137": "polygon", "42161": "arbitrum", "10": "optimism", "8453": "base", "43114": "avalanche", "196": "xlayer", "250": "fantom", "324": "zksync", "59144": "linea", "534352": "scroll" };
+      const chainParam = String(req.query.chain ?? "196");
+      const network = dexChainMap[chainParam] ?? "xlayer";
+      const pairs = await getTokenPairs(network, req.params.token);
       res.json({ pairs });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -254,25 +273,52 @@ export function createServiceRouter(
   router.get("/manage/portfolio", async (_req: Request, res: Response): Promise<void> => {
     try {
       const executor = agents["3"] as unknown as ExecutorAgent | undefined;
-      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const walletAddr = _req.query.address ? String(_req.query.address) : executor?.walletAddress;
+      if (!walletAddr) { res.status(503).json({ error: "No wallet address" }); return; }
 
-      const positions = executor.lpPositions;
+      const positions = executor?.lpPositions ?? [];
+
+      const allChains = "ethereum,bsc,polygon,optimism,base,arbitrum,xlayer,avalanche,zksync,fantom";
 
       let walletBalances: unknown = null;
       try {
-        const balResult = onchainosPortfolio.allBalances(executor.walletAddress);
-        if (balResult.success) walletBalances = balResult.data;
+        const balResult = onchainosPortfolio.allBalances(walletAddr, allChains);
+        if (balResult.success) {
+          // Onchainos returns {tokenAssets: [...]} — extract and normalize
+          const raw = balResult.data as Record<string, unknown> | unknown[];
+          let assets: Record<string, unknown>[];
+          if (raw && !Array.isArray(raw) && Array.isArray((raw as Record<string, unknown>).tokenAssets)) {
+            assets = (raw as Record<string, unknown>).tokenAssets as Record<string, unknown>[];
+          } else if (Array.isArray(raw)) {
+            assets = raw as Record<string, unknown>[];
+          } else {
+            assets = [];
+          }
+          // Normalize: calculate balanceUsd, map field names for frontend
+          walletBalances = assets
+            .map((t) => {
+              const bal = Number(t.balance ?? 0);
+              const price = Number(t.tokenPrice ?? 0);
+              return {
+                ...t,
+                tokenAddress: t.tokenContractAddress,
+                balanceUsd: bal * price,
+              };
+            })
+            .filter((t) => t.balanceUsd > 0.01)
+            .sort((a, b) => b.balanceUsd - a.balanceUsd);
+        }
       } catch { /* */ }
 
       let totalValue: unknown = null;
       try {
-        const valResult = onchainosPortfolio.totalValue(executor.walletAddress);
+        const valResult = onchainosPortfolio.totalValue(walletAddr, allChains);
         if (valResult.success) totalValue = valResult.data;
       } catch { /* */ }
 
       let defiPositions: unknown = null;
       try {
-        const posResult = onchainosDefi.positions(executor.walletAddress);
+        const posResult = onchainosDefi.positions(walletAddr);
         if (posResult.success) defiPositions = posResult.data;
       } catch { /* */ }
 
@@ -1050,16 +1096,17 @@ export function createServiceRouter(
   router.get("/analyze/:token", async (req: Request, res: Response): Promise<void> => {
     try {
       const { token } = req.params;
+      const chainId = req.query.chain ? Number(req.query.chain) : undefined;
       const analyst = agents["2"];
       if (!analyst) { res.status(503).json({ error: "Analyst not available" }); return; }
 
       const cached = verdictStore.getByToken(token);
-      if (cached && !req.query.fresh) {
+      if (cached && !req.query.fresh && !chainId) {
         res.json({ verdict: cached, cached: true });
         return;
       }
 
-      const result = await analyst.execute("scan", { token });
+      const result = await analyst.execute("scan", { token, chainId });
       res.json({ verdict: result, cached: false });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1069,9 +1116,10 @@ export function createServiceRouter(
   router.post("/analyze/:token/rescan", async (req: Request, res: Response): Promise<void> => {
     try {
       const { token } = req.params;
+      const chainId = req.query.chain ? Number(req.query.chain) : (req.body as Record<string, unknown>)?.chainId ? Number((req.body as Record<string, unknown>).chainId) : undefined;
       const analyst = agents["2"];
       if (!analyst) { res.status(503).json({ error: "Analyst not available" }); return; }
-      const result = await analyst.execute("scan", { token });
+      const result = await analyst.execute("scan", { token, chainId });
       res.json({ verdict: result });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1108,12 +1156,14 @@ export function createServiceRouter(
       const limit = Number(req.query.limit ?? 20);
       const signals: Array<Record<string, unknown>> = [];
 
-      // Tracker activities: smart_money, kol
+      // Tracker activities: smart_money, kol — response is { trades: [...] }
       for (const tracker of ["smart_money", "kol"]) {
         try {
           const result = await onchainosSignal.activities(tracker);
-          if (result.success && Array.isArray(result.data)) {
-            for (const s of result.data as Array<Record<string, unknown>>) {
+          if (result.success && result.data) {
+            const raw = result.data as Record<string, unknown>;
+            const trades = Array.isArray(raw) ? raw : (Array.isArray(raw.trades) ? raw.trades : []);
+            for (const s of trades as Array<Record<string, unknown>>) {
               signals.push({ ...s, tracker });
             }
           }
@@ -1201,8 +1251,9 @@ export function createServiceRouter(
 
   router.get("/token/holders/:token", (_req: Request, res: Response): void => {
     try {
+      const chainId = _req.query.chain ? Number(_req.query.chain) : config.chainId;
       const tagFilter = _req.query.tag ? Number(_req.query.tag) : undefined;
-      const result = onchainosToken.holders(_req.params.token, config.chainId, tagFilter);
+      const result = onchainosToken.holders(_req.params.token, chainId, tagFilter);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1211,8 +1262,9 @@ export function createServiceRouter(
 
   router.get("/token/top-traders/:token", (_req: Request, res: Response): void => {
     try {
+      const chainId = _req.query.chain ? Number(_req.query.chain) : config.chainId;
       const tagFilter = _req.query.tag ? Number(_req.query.tag) : undefined;
-      const result = onchainosToken.topTrader(_req.params.token, config.chainId, tagFilter);
+      const result = onchainosToken.topTrader(_req.params.token, chainId, tagFilter);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1221,9 +1273,10 @@ export function createServiceRouter(
 
   router.get("/token/trades/:token", (_req: Request, res: Response): void => {
     try {
+      const chainId = _req.query.chain ? Number(_req.query.chain) : config.chainId;
       const limit = _req.query.limit ? Number(_req.query.limit) : undefined;
       const tagFilter = _req.query.tag ? Number(_req.query.tag) : undefined;
-      const result = onchainosToken.trades(_req.params.token, config.chainId, limit, tagFilter);
+      const result = onchainosToken.trades(_req.params.token, chainId, limit, tagFilter);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1232,7 +1285,8 @@ export function createServiceRouter(
 
   router.get("/token/cluster/:token", (_req: Request, res: Response): void => {
     try {
-      const result = onchainosToken.clusterOverview(_req.params.token, config.chainId);
+      const chainId = _req.query.chain ? Number(_req.query.chain) : config.chainId;
+      const result = onchainosToken.clusterOverview(_req.params.token, chainId);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1242,7 +1296,8 @@ export function createServiceRouter(
   router.get("/token/cluster-holders/:token", (req: Request, res: Response): void => {
     try {
       const range = String(req.query.range ?? "3");
-      const result = onchainosToken.clusterTopHolders(req.params.token, range, config.chainId);
+      const clusterChain = req.query.chain ? Number(req.query.chain) : config.chainId;
+      const result = onchainosToken.clusterTopHolders(req.params.token, range, clusterChain);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1383,10 +1438,23 @@ export function createServiceRouter(
   router.get("/portfolio/overview", (_req: Request, res: Response): void => {
     try {
       const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
-      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
-      const timeFrame = String(_req.query.timeFrame ?? "7d");
-      const result = onchainosPortfolio.overview(executor.walletAddress, config.chainId, timeFrame);
-      res.json({ success: result.success, data: result.data });
+      const walletAddr = _req.query.address ? String(_req.query.address) : executor?.walletAddress;
+      if (!walletAddr) { res.status(503).json({ error: "No wallet address" }); return; }
+      const allChains = "ethereum,bsc,polygon,optimism,base,arbitrum,xlayer,avalanche,zksync,fantom";
+
+      // total-value across all chains
+      const tvResult = onchainosPortfolio.totalValue(walletAddr, allChains);
+      const tvData = tvResult.data as Record<string, unknown> | undefined;
+      const totalValue = Number(tvData?.totalValue ?? 0);
+
+      // defi positions count
+      const posResult = onchainosDefi.positions(walletAddr, allChains);
+      const posData = posResult.data as Record<string, unknown> | undefined;
+      const platforms = (posData?.walletIdPlatformList as Record<string, unknown>[] | undefined)?.[0];
+      const platformList = (platforms?.platformList ?? []) as Record<string, unknown>[];
+      const totalPositions = platformList.reduce((sum, p) => sum + Number(p.investmentCount ?? 0), 0);
+
+      res.json({ success: true, data: { totalValue, totalPositions } });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
@@ -1394,10 +1462,8 @@ export function createServiceRouter(
 
   router.get("/portfolio/pnl", (_req: Request, res: Response): void => {
     try {
-      const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
-      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
-      const result = onchainosPortfolio.recentPnl(executor.walletAddress, config.chainId);
-      res.json({ success: result.success, data: result.data });
+      // PnL not available via onchainos CLI — return zeros for now
+      res.json({ success: true, data: { pnl24h: 0, pnl7d: 0 } });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
@@ -1406,8 +1472,10 @@ export function createServiceRouter(
   router.get("/portfolio/token-pnl/:token", (_req: Request, res: Response): void => {
     try {
       const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
-      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
-      const result = onchainosPortfolio.tokenPnl(executor.walletAddress, config.chainId, _req.params.token);
+      const walletAddr = _req.query.address ? String(_req.query.address) : executor?.walletAddress;
+      if (!walletAddr) { res.status(503).json({ error: "No wallet address" }); return; }
+      const chainId = _req.query.chainId ? Number(_req.query.chainId) : 1;
+      const result = onchainosPortfolio.tokenPnl(walletAddr, chainId, _req.params.token);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1417,14 +1485,16 @@ export function createServiceRouter(
   router.get("/portfolio/history", (_req: Request, res: Response): void => {
     try {
       const executor = agents["3"] as unknown as { walletAddress: string } | undefined;
-      if (!executor) { res.status(503).json({ error: "Executor not available" }); return; }
+      const walletAddr = _req.query.address ? String(_req.query.address) : executor?.walletAddress;
+      if (!walletAddr) { res.status(503).json({ error: "No wallet address" }); return; }
       const begin = _req.query.begin ? String(_req.query.begin) : undefined;
       const end = _req.query.end ? String(_req.query.end) : undefined;
       const limit = _req.query.limit ? Number(_req.query.limit) : undefined;
       const cursor = _req.query.cursor ? String(_req.query.cursor) : undefined;
       const token = _req.query.token ? String(_req.query.token) : undefined;
       const txType = _req.query.txType ? String(_req.query.txType) : undefined;
-      const result = onchainosPortfolio.dexHistory(executor.walletAddress, config.chainId, begin, end, limit, cursor, token, txType);
+      const chainId = _req.query.chainId ? Number(_req.query.chainId) : 1;
+      const result = onchainosPortfolio.dexHistory(walletAddr, chainId, begin, end, limit, cursor, token, txType);
       res.json({ success: result.success, data: result.data });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
@@ -1435,9 +1505,27 @@ export function createServiceRouter(
 
   router.get("/defi/products", (_req: Request, res: Response): void => {
     try {
-      const page = _req.query.page ? Number(_req.query.page) : 1;
-      const result = onchainosDefi.list(page);
-      res.json({ success: result.success, data: result.data });
+      const all = _req.query.all === "1";
+      const chain = _req.query.chain ? Number(_req.query.chain) : undefined;
+
+      if (!all) {
+        const page = _req.query.page ? Number(_req.query.page) : 1;
+        const result = onchainosDefi.list(page, chain);
+        res.json({ success: result.success, data: result.data });
+        return;
+      }
+
+      // Fetch all pages
+      const allProducts: unknown[] = [];
+      for (let page = 1; page <= 50; page++) {
+        const result = onchainosDefi.list(page, chain);
+        const data = result.data as Record<string, unknown> | undefined;
+        const list = data?.list;
+        if (!Array.isArray(list) || list.length === 0) break;
+        allProducts.push(...list);
+        if (list.length < 20) break; // last page
+      }
+      res.json({ success: true, data: { list: allProducts, total: allProducts.length } });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
@@ -1587,43 +1675,88 @@ export function createServiceRouter(
       const result = onchainosDefi.positions(_req.params.address, chains);
       const data = result.data as Record<string, unknown> | undefined;
 
-      // positions returns summary with walletIdPlatformList — fetch detail for each platform
-      const platformList = data?.walletIdPlatformList as Record<string, unknown>[] | undefined;
-      const allPositions: Record<string, unknown>[] = [];
+      // Structure: { walletIdPlatformList: [{ accountId, platformList: [{ analysisPlatformId, currencyAmount, networkBalanceList: [...] }] }] }
+      const accounts = data?.walletIdPlatformList as Record<string, unknown>[] | undefined;
+      const platforms = (accounts?.[0]?.platformList ?? []) as Record<string, unknown>[];
 
-      if (Array.isArray(platformList)) {
-        for (const plat of platformList) {
-          const totalAssets = Number(plat.totalAssets ?? 0);
-          if (totalAssets <= 0) continue;
-
-          // Each platform may list chains with positions
-          const chainList = plat.chainList as Record<string, unknown>[] | undefined;
-          if (Array.isArray(chainList)) {
-            for (const chain of chainList) {
-              const platformId = String(chain.analysisPlatformId ?? plat.analysisPlatformId ?? "");
-              const chainName = String(chain.chain ?? "");
-              if (!platformId || !chainName) continue;
-
-              const detailResult = onchainosDefi.positionDetail(_req.params.address, Number(chain.chainIndex ?? 1), platformId);
-              const detailData = detailResult.data as Record<string, unknown> | undefined;
-              const investments = detailData?.investments ?? detailData?.tokenList ?? detailData?.list;
-              if (Array.isArray(investments)) {
-                for (const inv of investments as Record<string, unknown>[]) {
-                  allPositions.push({ ...inv, chain: chainName, platformId });
-                }
-              }
-            }
-          }
-        }
-      }
+      // Return platform-level summary (no slow per-platform detail calls)
+      const investments = platforms
+        .filter((p) => Number(p.currencyAmount ?? 0) > 0.01)
+        .map((p) => {
+          const networks = (p.networkBalanceList ?? []) as Record<string, unknown>[];
+          return {
+            investmentId: String(p.analysisPlatformId ?? ""),
+            name: String(p.platformName ?? ""),
+            platform: String(p.platformName ?? ""),
+            platformLogo: String(p.platformLogo ?? ""),
+            productType: "DEFI",
+            value: Number(p.currencyAmount ?? 0),
+            earned: 0,
+            apy: 0,
+            status: "Active",
+            investmentCount: Number(p.investmentCount ?? 0),
+            networks: networks.map((n) => ({
+              chain: String(n.network ?? ""),
+              chainIndex: String(n.chainIndex ?? ""),
+              value: Number(n.currencyAmount ?? 0),
+            })),
+          };
+        })
+        .sort((a, b) => b.value - a.value);
 
       res.json({
         success: result.success,
         data: {
-          ...data,
-          positions: allPositions,
+          investments,
+          totalPositions: investments.reduce((s, p) => s + p.investmentCount, 0),
+          totalValue: investments.reduce((s, p) => s + p.value, 0),
         },
       });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── DeFi Position Detail (lazy load on expand) ──
+
+  router.get("/defi/position-detail/:address", (_req: Request, res: Response): void => {
+    try {
+      const chainId = Number(_req.query.chainId ?? 1);
+      const platformId = String(_req.query.platformId ?? "");
+      if (!platformId) { res.status(400).json({ error: "platformId required" }); return; }
+
+      const result = onchainosDefi.positionDetail(_req.params.address, chainId, platformId);
+      const raw = result.data as Record<string, unknown> | Record<string, unknown>[] | undefined;
+      const platform = Array.isArray(raw) ? raw[0] : raw;
+      const detail = ((platform?.walletIdPlatformDetailList ?? []) as Record<string, unknown>[])[0];
+      const holdings = (detail?.networkHoldVoList ?? []) as Record<string, unknown>[];
+
+      const investments: Record<string, unknown>[] = [];
+      for (const hold of holdings) {
+        for (const inv of (hold.investTokenBalanceVoList ?? []) as Record<string, unknown>[]) {
+          const extras = (inv.extraFieldList ?? []) as Record<string, unknown>[];
+          const unlockField = extras.find((e) => String(e.fieldName ?? "").toLowerCase().includes("unlock"));
+          const unlockDate = unlockField
+            ? String((unlockField.fieldValue as string[])?.[0] ?? "")
+            : undefined;
+
+          const assets = (inv.assetsTokenList ?? []) as Record<string, unknown>[];
+          investments.push({
+            investName: String(inv.investName ?? ""),
+            investType: Number(inv.investType ?? 0),
+            isRedeemable: inv.isRedeemable ?? null,
+            unlockDate: unlockDate || undefined,
+            tokens: assets.map((a) => ({
+              symbol: String(a.tokenSymbol ?? ""),
+              amount: String(a.coinAmount ?? "0"),
+              valueUsd: Number(a.currencyAmount ?? 0),
+              address: String(a.tokenAddress ?? ""),
+            })),
+          });
+        }
+      }
+
+      res.json({ success: result.success, data: { investments } });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { STALE_SLOW, REFETCH_SLOW } from "../lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
@@ -42,28 +43,42 @@ function timeAgo(ts: number): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
+async function fetchStats(): Promise<Stats | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/stats`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return (d.verdicts ?? d) as Stats;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchRecentVerdicts(): Promise<Verdict[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/verdicts?limit=5`);
+    if (!res.ok) return [];
+    const d = await res.json();
+    return (d.verdicts ?? []) as Verdict[];
+  } catch {
+    return [];
+  }
+}
+
 export default function LandingPage(): React.ReactNode {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [verdicts, setVerdicts] = useState<Verdict[]>([]);
+  const { data: stats } = useQuery({
+    queryKey: ["landing-stats"],
+    queryFn: fetchStats,
+    staleTime: STALE_SLOW,
+    refetchInterval: REFETCH_SLOW,
+  });
 
-  const fetchData = useCallback(async (): Promise<void> => {
-    try {
-      const [statsRes, verdictsRes] = await Promise.all([
-        fetch(`${API_URL}/api/stats`),
-        fetch(`${API_URL}/api/verdicts?limit=5`),
-      ]);
-      if (statsRes.ok) {
-        const d = await statsRes.json();
-        setStats((d.verdicts ?? d) as Stats);
-      }
-      if (verdictsRes.ok) {
-        const d = await verdictsRes.json();
-        setVerdicts((d.verdicts ?? []) as Verdict[]);
-      }
-    } catch { /* server unavailable */ }
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const { data: verdicts } = useQuery({
+    queryKey: ["landing-verdicts"],
+    queryFn: fetchRecentVerdicts,
+    staleTime: STALE_SLOW,
+    refetchInterval: REFETCH_SLOW,
+  });
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10">
@@ -120,7 +135,7 @@ export default function LandingPage(): React.ReactNode {
         {/* Live verdicts table */}
         <div className="flex-1">
           <h3 className="text-xs font-medium text-[#a1a1aa] uppercase tracking-wider mb-3">Recent Verdicts</h3>
-          {verdicts.length === 0 ? (
+          {!verdicts || verdicts.length === 0 ? (
             <p className="text-sm text-[#52525b]">No verdicts yet.</p>
           ) : (
             <table className="w-full text-xs font-mono">

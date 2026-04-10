@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchDevInfo, fetchSimilarTokens, fetchBundleInfo, fetchApedWallets, truncAddr, timeAgo, formatUsd } from "../lib/api";
+import { fetchDevInfo, fetchSimilarTokens, fetchBundleInfo, fetchApedWallets, truncAddr, timeAgo, formatUsd, STALE_NORMAL, REFETCH_SLOW } from "../lib/api";
 
 function KV({ label, value }: { label: string; value: React.ReactNode }): React.ReactNode {
   return (
@@ -13,10 +13,10 @@ function KV({ label, value }: { label: string; value: React.ReactNode }): React.
 }
 
 export function TabDevIntel({ address }: { address: string }): React.ReactNode {
-  const { data: devData } = useQuery({ queryKey: ["dev-info", address], queryFn: () => fetchDevInfo(address) });
-  const { data: similarData } = useQuery({ queryKey: ["similar-tokens", address], queryFn: () => fetchSimilarTokens(address) });
-  const { data: bundleData } = useQuery({ queryKey: ["bundle-info", address], queryFn: () => fetchBundleInfo(address) });
-  const { data: apedData } = useQuery({ queryKey: ["aped-wallets", address], queryFn: () => fetchApedWallets(address) });
+  const { data: devData } = useQuery({ queryKey: ["dev-info", address], queryFn: () => fetchDevInfo(address), staleTime: STALE_NORMAL, refetchInterval: REFETCH_SLOW });
+  const { data: similarData } = useQuery({ queryKey: ["similar-tokens", address], queryFn: () => fetchSimilarTokens(address), staleTime: STALE_NORMAL, refetchInterval: REFETCH_SLOW });
+  const { data: bundleData } = useQuery({ queryKey: ["bundle-info", address], queryFn: () => fetchBundleInfo(address), staleTime: STALE_NORMAL, refetchInterval: REFETCH_SLOW });
+  const { data: apedData } = useQuery({ queryKey: ["aped-wallets", address], queryFn: () => fetchApedWallets(address), staleTime: STALE_NORMAL, refetchInterval: REFETCH_SLOW });
 
   const dev = (devData?.data ?? devData) as Record<string, unknown> | undefined;
   const devInfo = (dev?.devLaunchedInfo ?? dev) as Record<string, unknown> | undefined;

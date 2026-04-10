@@ -49,11 +49,50 @@ export function onchainos<T>(command: string): OnchainosResult<T> {
   }
 }
 
+let walletContextTail: Promise<void> = Promise.resolve();
+
+export async function withOnchainosWalletLock<T>(
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  const previous = walletContextTail;
+  let release!: () => void;
+  walletContextTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+export async function withOnchainosWalletAccount<T>(
+  accountId: string | undefined,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  return withOnchainosWalletLock(async () => {
+    if (accountId) {
+      const switched = onchainosWallet.switchAccount(accountId);
+      if (!switched.success) {
+        throw new Error(switched.error ?? `Failed to switch OnchainOS wallet account ${accountId}`);
+      }
+    }
+
+    return await fn();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Wallet
 // ---------------------------------------------------------------------------
 
 export const onchainosWallet = {
+  add: (): OnchainosResult<unknown> =>
+    onchainos("wallet add"),
+
   balance: (chainId?: number, tokenAddress?: string): OnchainosResult<unknown> =>
     onchainos(`wallet balance${chainId ? ` --chain ${chainId}` : ""}${tokenAddress ? ` --token-address ${tokenAddress}` : ""} --force`),
 
@@ -243,8 +282,8 @@ export const onchainosDefi = {
     onchainos("defi support-platforms"),
 
   /** List all DeFi products by APY */
-  list: (pageNum: number = 1): OnchainosResult<unknown> =>
-    onchainos(`defi list --page-num ${pageNum}`),
+  list: (pageNum: number = 1, chain?: number): OnchainosResult<unknown> =>
+    onchainos(`defi list --page-num ${pageNum}${chain ? ` --chain ${chain}` : ""}`),
 
   /** Search DeFi products — use --token and/or --platform, product-group: SINGLE_EARN, DEX_POOL, LENDING */
   search: (token: string, chainId: number = 196, productGroup: string = "DEX_POOL", platform?: string): OnchainosResult<unknown> =>

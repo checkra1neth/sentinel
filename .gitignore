@@ -11,6 +11,20 @@ dist/
 # Env
 .env
 .env.local
+.env.*.local
+
+# Runtime data
+server/data/
+server/dist/
+
+# AI tooling (internal)
+.superpowers/
+.kiro/
+.agents/
+.factory/
+.claude/
+web/docs/
 
 # OS
 .DS_Store
+*.log

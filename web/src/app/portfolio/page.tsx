@@ -1,152 +1,62 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  fetchLpPositions,
-  collectAllRewards,
-  exitPosition,
-  formatUsd,
-  timeAgo,
-  truncAddr,
-} from "../../lib/api";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { PortfolioOverview } from "../../components/portfolio-overview";
 import { TokenBalances } from "../../components/token-balances";
+import { DefiPositions } from "../../components/defi-positions";
 import { ApprovalManager } from "../../components/approval-manager";
 import { DexHistory } from "../../components/dex-history";
+import { PageSkeleton } from "../../components/page-skeleton";
 
-interface LpPosition {
-  token: string;
-  tokenSymbol: string;
-  poolName: string;
-  platformName: string;
-  amountInvested: string;
-  apr: string;
-  tvl: string;
-  range: number;
-  timestamp: number;
-  investmentId?: string;
-}
+const TABS = ["Balances", "DeFi", "Approvals", "History"] as const;
+type PortfolioTab = (typeof TABS)[number];
 
-export default function PortfolioPage(): React.ReactNode {
-  const queryClient = useQueryClient();
-
-  const { data: lpData } = useQuery({
-    queryKey: ["lp-positions"],
-    queryFn: fetchLpPositions,
-    refetchInterval: 15_000,
-  });
-
-  // Agents data no longer needed — ApprovalManager uses connected wallet directly
-
-  const collectMutation = useMutation({
-    mutationFn: collectAllRewards,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lp-positions"] });
-    },
-  });
-
-  const exitMutation = useMutation({
-    mutationFn: (investmentId: string) => exitPosition(investmentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lp-positions"] });
-      queryClient.invalidateQueries({ queryKey: ["portfolio-overview"] });
-    },
-  });
-
-  const positions: LpPosition[] = Array.isArray(lpData?.positions)
-    ? (lpData.positions as Record<string, unknown>[]).map((p) => ({
-        token: String(p.token ?? ""),
-        tokenSymbol: String(p.tokenSymbol ?? "Unknown"),
-        poolName: String(p.poolName ?? ""),
-        platformName: String(p.platformName ?? ""),
-        amountInvested: String(p.amountInvested ?? "0"),
-        apr: String(p.apr ?? "0"),
-        tvl: String(p.tvl ?? "0"),
-        range: Number(p.range ?? 0),
-        timestamp: Number(p.timestamp ?? Date.now()),
-        investmentId: String(p.investmentId ?? p.id ?? ""),
-      }))
-    : [];
-
-  // ApprovalManager now uses connected wallet internally via useAccount()
+function PortfolioContent(): React.ReactNode {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as PortfolioTab | null;
+  const initialTab = tabParam && (TABS as readonly string[]).includes(tabParam) ? tabParam : "Balances";
+  const [activeTab, setActiveTab] = useState<PortfolioTab>(initialTab);
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">
-      <h1 className="text-xl font-bold tracking-tight mb-6">Portfolio</h1>
+      <h1 className="text-lg font-semibold tracking-wide mb-4">Portfolio</h1>
 
-      {/* Overview stats */}
+      {/* Overview stats — always visible */}
       <PortfolioOverview />
 
-      {/* Token balances */}
-      <TokenBalances />
-
-      {/* LP Positions */}
-      <div className="py-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider">LP Positions</div>
-          {positions.length > 0 && (
-            <button
-              type="button"
-              onClick={() => collectMutation.mutate()}
-              disabled={collectMutation.isPending}
-              className="text-[10px] font-mono text-[#a1a1aa] hover:text-[#fafafa] transition-colors disabled:opacity-40"
-            >
-              {collectMutation.isPending ? "Collecting..." : "Collect All"}
-            </button>
-          )}
-        </div>
-        {positions.length === 0 ? (
-          <p className="text-xs text-[#52525b] font-mono py-4">
-            No LP positions. Executor invests in tokens rated SAFE.
-          </p>
-        ) : (
-          <table className="w-full text-xs font-mono">
-            <thead>
-              <tr className="text-left border-b border-white/[0.06]">
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider">Token</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider">Pool</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Invested</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">APR</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right hidden sm:table-cell">TVL</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right hidden sm:table-cell">Range</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Age</th>
-                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((p, i) => (
-                <tr key={`${p.token}-${i}`} className="border-b border-white/[0.03]">
-                  <td className="py-2 text-[#fafafa]">{p.tokenSymbol}</td>
-                  <td className="py-2 text-[#a1a1aa]">{p.poolName}</td>
-                  <td className="py-2 text-right text-[#a1a1aa]">{formatUsd(Number(p.amountInvested))}</td>
-                  <td className="py-2 text-right text-[#34d399]">{(Number(p.apr) * 100).toFixed(1)}%</td>
-                  <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">{formatUsd(Number(p.tvl))}</td>
-                  <td className="py-2 text-right text-[#a1a1aa] hidden sm:table-cell">{p.range ? `\u00B1${p.range}%` : "--"}</td>
-                  <td className="py-2 text-right text-[#52525b]">{timeAgo(p.timestamp)}</td>
-                  <td className="py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (p.investmentId) exitMutation.mutate(p.investmentId);
-                      }}
-                      disabled={exitMutation.isPending || !p.investmentId}
-                      className="text-[#ef4444] hover:text-[#f87171] transition-colors disabled:opacity-40 text-[10px]"
-                    >
-                      Exit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      {/* Tabs */}
+      <div className="flex gap-0 border-b border-white/[0.06] mt-4">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2.5 text-xs font-medium transition-colors cursor-pointer border-b-2 ${
+              activeTab === tab
+                ? "text-[#fafafa] border-[#06b6d4]"
+                : "text-[#52525b] border-transparent hover:text-[#a1a1aa]"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
-      {/* Approvals — uses connected wallet */}
-      <ApprovalManager />
-
-      {/* DEX History */}
-      <DexHistory />
+      {/* Tab content */}
+      <div className="mt-6">
+        {activeTab === "Balances" && <TokenBalances />}
+        {activeTab === "DeFi" && <DefiPositions />}
+        {activeTab === "Approvals" && <ApprovalManager />}
+        {activeTab === "History" && <DexHistory />}
+      </div>
     </div>
+  );
+}
+
+export default function PortfolioPage(): React.ReactNode {
+  return (
+    <Suspense fallback={<PageSkeleton lines={10} />}>
+      <PortfolioContent />
+    </Suspense>
   );
 }

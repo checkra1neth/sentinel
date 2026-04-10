@@ -107,7 +107,7 @@ decisionEngine.onEvent((event) => eventBus.emit(event));
 const serviceRouter = createServiceRouter(agents);
 app.use("/api", serviceRouter);
 
-const chatRouter = createChatRouter(agents, wallets.analyst);
+const chatRouter = createChatRouter(agents);
 app.use("/api", chatRouter);
 
 const metadataRouter = createMetadataRouter();

@@ -9,6 +9,21 @@ import { DappScanResultCard } from "../../components/dapp-scan-result";
 
 type ScanKind = "token" | "domain" | null;
 
+const CHAINS = [
+  { id: 196, name: "X Layer" },
+  { id: 1, name: "Ethereum" },
+  { id: 56, name: "BNB Chain" },
+  { id: 137, name: "Polygon" },
+  { id: 42161, name: "Arbitrum" },
+  { id: 10, name: "Optimism" },
+  { id: 8453, name: "Base" },
+  { id: 43114, name: "Avalanche" },
+  { id: 250, name: "Fantom" },
+  { id: 324, name: "zkSync Era" },
+  { id: 59144, name: "Linea" },
+  { id: 534352, name: "Scroll" },
+] as const;
+
 function detectKind(input: string): ScanKind {
   const v = input.trim();
   if (/^0x[a-fA-F0-9]{40,42}$/i.test(v)) return "token";
@@ -18,9 +33,10 @@ function detectKind(input: string): ScanKind {
 
 export default function AnalyzePage(): React.ReactNode {
   const [input, setInput] = useState("");
+  const [chainId, setChainId] = useState<number>(196);
 
   const tokenMutation = useMutation({
-    mutationFn: (addr: string) => scanToken(addr),
+    mutationFn: (args: { addr: string; chain: number }) => scanToken(args.addr, args.chain),
   });
 
   const dappMutation = useMutation({
@@ -34,19 +50,19 @@ export default function AnalyzePage(): React.ReactNode {
     if (!v) return;
     const kind = detectKind(v);
     if (kind === "token") {
-      tokenMutation.mutate(v);
+      tokenMutation.mutate({ addr: v, chain: chainId });
     } else if (kind === "domain") {
       setLastDomain(v);
       dappMutation.mutate(v);
     }
-  }, [input, tokenMutation, dappMutation]);
+  }, [input, chainId, tokenMutation, dappMutation]);
 
   const handleRescan = useCallback(() => {
     const v = input.trim();
     if (detectKind(v) === "token") {
-      tokenMutation.mutate(v);
+      tokenMutation.mutate({ addr: v, chain: chainId });
     }
-  }, [input, tokenMutation]);
+  }, [input, chainId, tokenMutation]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -68,6 +84,17 @@ export default function AnalyzePage(): React.ReactNode {
           Scan Token or Domain
         </div>
         <div className="flex gap-2">
+          <select
+            value={chainId}
+            onChange={(e) => setChainId(Number(e.target.value))}
+            className="bg-white/[0.03] border border-white/[0.06] rounded px-2 py-2 text-xs text-[#fafafa] outline-none focus:border-white/[0.12] transition-colors appearance-none cursor-pointer"
+          >
+            {CHAINS.map((c) => (
+              <option key={c.id} value={c.id} className="bg-[#0a0a0a]">
+                {c.name}
+              </option>
+            ))}
+          </select>
           <input
             type="text"
             value={input}

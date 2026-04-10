@@ -27,7 +27,6 @@ const REGISTER_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "agentURI", type: "string" },
-      { name: "agentWallet", type: "address" },
     ],
     outputs: [{ name: "agentId", type: "uint256" }],
   },
@@ -95,7 +94,7 @@ async function registerAgent(agent: AgentDef): Promise<void> {
   const calldata = encodeFunctionData({
     abi: REGISTER_ABI,
     functionName: "register",
-    args: [dataUri, agent.address],
+    args: [dataUri],
   });
   console.log(`  Calldata: ${calldata.slice(0, 20)}...${calldata.slice(-8)}`);
 

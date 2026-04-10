@@ -6,9 +6,10 @@ interface SwapPreFlightProps {
   token: string;
   verdict: Verdict | null;
   loading: boolean;
+  tokenSymbol?: string;
 }
 
-export function SwapPreFlight({ token, verdict, loading }: SwapPreFlightProps): React.ReactNode {
+export function SwapPreFlight({ token, verdict, loading, tokenSymbol }: SwapPreFlightProps): React.ReactNode {
   if (loading) {
     return (
       <div className="flex items-center gap-2 bg-white/[0.02] border border-white/[0.06] rounded px-3 py-2">
@@ -30,6 +31,7 @@ export function SwapPreFlight({ token, verdict, loading }: SwapPreFlightProps): 
   }
 
   const v = verdict.verdict;
+  const displaySymbol = verdict.tokenSymbol || tokenSymbol || token.slice(0, 8);
 
   const badgeColor =
     v === "SAFE"
@@ -55,7 +57,7 @@ export function SwapPreFlight({ token, verdict, loading }: SwapPreFlightProps): 
           {v}
         </span>
         <span className="text-[11px] font-mono text-[#a1a1aa]">
-          {verdict.tokenSymbol || token.slice(0, 8)}
+          {displaySymbol}
         </span>
       </div>
 

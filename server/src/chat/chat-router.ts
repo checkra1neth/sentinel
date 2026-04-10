@@ -9,6 +9,7 @@ import { parseCommand, getHelpText } from "./command-parser.js";
 import { JobManager } from "../erc8183/job-manager.js";
 import type { BaseAgent } from "../agents/base-agent.js";
 import type { AgenticWallet } from "../wallet/agentic-wallet.js";
+import { userWalletManager } from "../wallet/user-wallet-manager.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +28,11 @@ interface ChatResponse {
     data?: Record<string, unknown>;
   };
   jobId?: string;
+}
+
+interface UserWalletContext {
+  wallet: AgenticWallet;
+  agentWalletAddress: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,13 +140,54 @@ function formatDepositResponse(result: Record<string, unknown>): ChatResponse["r
   };
 }
 
+function formatErrorResponse(
+  result: Record<string, unknown>,
+  fallback: string,
+): ChatResponse["response"] {
+  const error = typeof result.error === "string"
+    ? result.error
+    : fallback;
+
+  return {
+    text: error,
+    type: "error",
+    data: result,
+  };
+}
+
+function createChatErrorResponse(text: string): ChatResponse {
+  return {
+    success: false,
+    response: { text, type: "error" },
+  };
+}
+
+async function resolveUserWalletContext(
+  walletAddress?: string,
+): Promise<UserWalletContext | ChatResponse> {
+  if (!walletAddress) {
+    return createChatErrorResponse("Connect your wallet to create and fund your personal TEE wallet first.");
+  }
+
+  try {
+    const account = await userWalletManager.getOrCreateAccount(walletAddress);
+    return {
+      wallet: userWalletManager.getWalletForAccount(account),
+      agentWalletAddress: account.agentWalletAddress,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to provision your TEE wallet";
+    return createChatErrorResponse(message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Router factory
 // ---------------------------------------------------------------------------
 
-export function createChatRouter(agents: Record<string, BaseAgent>, sentinelWallet?: AgenticWallet): Router {
+export function createChatRouter(agents: Record<string, BaseAgent>): Router {
   const router = Router();
-  const jobManager = new JobManager(agents, sentinelWallet);
+  const jobManager = new JobManager(agents);
 
   router.post("/chat/message", async (req: Request, res: Response): Promise<void> => {
     try {
@@ -161,33 +208,61 @@ export function createChatRouter(agents: Record<string, BaseAgent>, sentinelWall
       switch (command.type) {
         // -- Security scan --------------------------------------------------
         case "SECURITY_SCAN": {
+          const walletContext = await resolveUserWalletContext(body?.walletAddress);
+          if ("success" in walletContext) {
+            response = walletContext;
+            break;
+          }
+
           const job = await jobManager.createSecurityJob(
             command.params.address,
+            walletContext.wallet,
             command.params.chainId ? Number(command.params.chainId) : undefined,
           );
-          const formatted = formatSecurityResponse(job.result ?? {});
+          const formatted = job.status === "completed"
+            ? formatSecurityResponse(job.result ?? {})
+            : formatErrorResponse(job.result ?? {}, "Security scan failed.");
           response = { success: job.status === "completed", response: formatted, jobId: job.id };
           break;
         }
 
         // -- Swap / Buy / Sell ----------------------------------------------
         case "SWAP": {
+          const walletContext = await resolveUserWalletContext(body?.walletAddress);
+          if ("success" in walletContext) {
+            response = walletContext;
+            break;
+          }
+
           const job = await jobManager.createSwapJob({
             from: command.params.fromToken,
             to: command.params.toToken,
             amount: command.params.amount,
-            walletAddress: body?.walletAddress,
+            walletAddress: walletContext.agentWalletAddress,
             chainId: command.params.chainId ? Number(command.params.chainId) : undefined,
+            payerWallet: walletContext.wallet,
           });
-          const formatted = formatSwapResponse(job.result ?? {});
+          const formatted = (job.result as Record<string, unknown> | undefined)?.blocked
+            ? formatSwapResponse(job.result ?? {})
+            : job.status === "completed"
+              ? formatSwapResponse(job.result ?? {})
+              : formatErrorResponse(job.result ?? {}, "Swap quote failed.");
           response = { success: job.status === "completed", response: formatted, jobId: job.id };
           break;
         }
 
         // -- Portfolio ------------------------------------------------------
         case "PORTFOLIO": {
-          const data = await jobManager.getPortfolio(body?.walletAddress);
-          const formatted = formatPortfolioResponse(data);
+          const walletContext = await resolveUserWalletContext(body?.walletAddress);
+          if ("success" in walletContext) {
+            response = walletContext;
+            break;
+          }
+
+          const data = await jobManager.getPortfolio(walletContext.agentWalletAddress);
+          const formatted = data.error
+            ? formatErrorResponse(data, "Failed to load portfolio.")
+            : formatPortfolioResponse(data);
           response = { success: !data.error, response: formatted };
           break;
         }
@@ -202,12 +277,21 @@ export function createChatRouter(agents: Record<string, BaseAgent>, sentinelWall
 
         // -- DeFi deposit ---------------------------------------------------
         case "DEFI_DEPOSIT": {
+          const walletContext = await resolveUserWalletContext(body?.walletAddress);
+          if ("success" in walletContext) {
+            response = walletContext;
+            break;
+          }
+
           const job = await jobManager.createDepositJob({
             amount: command.params.amount,
             token: command.params.token,
             protocol: command.params.protocol,
+            payerWallet: walletContext.wallet,
           });
-          const formatted = formatDepositResponse(job.result ?? {});
+          const formatted = job.status === "completed"
+            ? formatDepositResponse(job.result ?? {})
+            : formatErrorResponse(job.result ?? {}, "DeFi deposit lookup failed.");
           response = { success: job.status === "completed", response: formatted, jobId: job.id };
           break;
         }

@@ -1,26 +1,38 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
-import { fetchDefiPositions, collectAllRewards, exitPosition, formatUsd, REFETCH_NORMAL, STALE_NORMAL } from "../lib/api";
-import { TypeBadge } from "./type-badge";
+import { fetchDefiPositions, fetchDefiPositionDetail, formatUsd, REFETCH_NORMAL, STALE_NORMAL } from "../lib/api";
 import { StatusBadge } from "./status-badge";
-import { RangeBar } from "./range-bar";
+
+interface Network {
+  chain: string;
+  chainIndex: string;
+  value: number;
+}
 
 interface Position {
   investmentId: string;
   name: string;
   platform: string;
-  productType: string;
+  platformLogo: string;
   value: number;
-  earned: number;
-  apy: number;
-  status: string;
-  lower?: number;
-  upper?: number;
-  current?: number;
-  openedAt?: string;
+  investmentCount: number;
+  networks: Network[];
+}
+
+interface DetailToken {
+  symbol: string;
+  amount: string;
+  valueUsd: number;
+}
+
+interface DetailInvestment {
+  investName: string;
+  investType: number;
+  unlockDate?: string;
+  tokens: DetailToken[];
 }
 
 function parsePositions(raw: Record<string, unknown>): Position[] {
@@ -32,21 +44,110 @@ function parsePositions(raw: Record<string, unknown>): Position[] {
     investmentId: String(p.investmentId ?? p.id ?? ""),
     name: String(p.name ?? p.poolName ?? p.tokenSymbol ?? ""),
     platform: String(p.platformName ?? p.platform ?? ""),
-    productType: String(p.investType ?? p.productGroup ?? "DEX_POOL"),
+    platformLogo: String(p.platformLogo ?? ""),
     value: Number(p.totalValue ?? p.value ?? p.holdingAmount ?? 0),
-    earned: Number(p.earnedAmount ?? p.earned ?? p.claimableAmount ?? 0),
-    apy: Number(p.rate ?? p.apy ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
-    status: p.isInRange === false ? "Out of Range" : p.isInRange === true ? "In Range" : "Active",
-    lower: Number(p.lowerPrice ?? p.tickLower ?? 0) || undefined,
-    upper: Number(p.upperPrice ?? p.tickUpper ?? 0) || undefined,
-    current: Number(p.currentPrice ?? p.price ?? 0) || undefined,
-    openedAt: p.openedAt ? String(p.openedAt) : undefined,
+    investmentCount: Number(p.investmentCount ?? 0),
+    networks: Array.isArray(p.networks)
+      ? (p.networks as Record<string, unknown>[]).map((n) => ({
+          chain: String(n.chain ?? ""),
+          chainIndex: String(n.chainIndex ?? ""),
+          value: Number(n.value ?? 0),
+        }))
+      : [],
   }));
+}
+
+function PositionDetail({ address, pos }: { address: string; pos: Position }): React.ReactNode {
+  // Fetch detail for the first network (lazy on expand)
+  const chainIndex = pos.networks[0]?.chainIndex ?? "1";
+  const { data: detailRaw, isLoading } = useQuery({
+    queryKey: ["defi-position-detail", address, chainIndex, pos.investmentId],
+    queryFn: () => fetchDefiPositionDetail(address, Number(chainIndex), pos.investmentId),
+    staleTime: 60_000,
+  });
+
+  const investments: DetailInvestment[] = useMemo(() => {
+    const data = (detailRaw?.data ?? detailRaw) as Record<string, unknown> | undefined;
+    const list = data?.investments;
+    if (!Array.isArray(list)) return [];
+    return (list as Record<string, unknown>[]).map((inv) => ({
+      investName: String(inv.investName ?? ""),
+      investType: Number(inv.investType ?? 0),
+      unlockDate: inv.unlockDate ? String(inv.unlockDate) : undefined,
+      tokens: Array.isArray(inv.tokens)
+        ? (inv.tokens as Record<string, unknown>[]).map((t) => ({
+            symbol: String(t.symbol ?? ""),
+            amount: String(t.amount ?? "0"),
+            valueUsd: Number(t.valueUsd ?? 0),
+          }))
+        : [],
+    }));
+  }, [detailRaw]);
+
+  if (isLoading) {
+    return (
+      <div className="px-4 pb-4 pt-2 border-t border-white/[0.04]">
+        <div className="h-4 w-48 bg-white/[0.04] animate-pulse rounded" />
+      </div>
+    );
+  }
+
+  const hasLock = investments.some((inv) => inv.unlockDate);
+
+  return (
+    <div className="px-4 pb-4 pt-2 border-t border-white/[0.04] space-y-3">
+      {/* Chains */}
+      <div className="flex gap-4 text-[11px] font-mono">
+        <div>
+          <span className="text-[#52525b]">Chains </span>
+          <span className="text-[#a1a1aa]">{pos.networks.map((n) => n.chain).join(", ") || "—"}</span>
+        </div>
+        <div>
+          <span className="text-[#52525b]">Sub-positions </span>
+          <span className="text-[#a1a1aa]">{pos.investmentCount}</span>
+        </div>
+      </div>
+
+      {/* Investments detail */}
+      {investments.length > 0 && (
+        <div className="space-y-2">
+          {investments.map((inv, i) => (
+            <div key={i} className="rounded bg-white/[0.02] border border-white/[0.04] px-3 py-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[11px] font-mono text-[#fafafa]">{inv.investName}</span>
+                {inv.unlockDate && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Locked until {inv.unlockDate}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3 flex-wrap">
+                {inv.tokens.map((t, j) => (
+                  <span key={j} className="text-[10px] font-mono text-[#a1a1aa]">
+                    {Number(t.amount).toFixed(4)} {t.symbol}
+                    {t.valueUsd > 0.01 && (
+                      <span className="text-[#52525b] ml-1">({formatUsd(t.valueUsd)})</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Lock warning instead of Exit */}
+      {hasLock && (
+        <div className="text-[10px] font-mono text-amber-400/60">
+          Some positions are locked and cannot be withdrawn yet.
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function DefiPositions(): React.ReactNode {
   const { address, isConnected } = useAccount();
-  const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const { data: rawPositions, isLoading } = useQuery({
@@ -58,22 +159,7 @@ export function DefiPositions(): React.ReactNode {
   });
 
   const positions = useMemo(() => parsePositions(rawPositions ?? {}), [rawPositions]);
-
   const totalValue = positions.reduce((s, p) => s + p.value, 0);
-  const totalEarned = positions.reduce((s, p) => s + p.earned, 0);
-  const avgApy = positions.length > 0
-    ? positions.reduce((s, p) => s + p.apy * p.value, 0) / (totalValue || 1)
-    : 0;
-
-  const collectMutation = useMutation({
-    mutationFn: collectAllRewards,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["defi-positions"] }),
-  });
-
-  const exitMutation = useMutation({
-    mutationFn: ({ id, ratio }: { id: string; ratio: number }) => exitPosition(id, ratio),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["defi-positions"] }),
-  });
 
   if (!isConnected) {
     return (
@@ -87,11 +173,11 @@ export function DefiPositions(): React.ReactNode {
     return (
       <div className="space-y-4">
         <div className="flex gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="flex-1 h-16 bg-white/[0.04] animate-pulse rounded-lg" />
           ))}
         </div>
-        {Array.from({ length: 3 }).map((_, i) => (
+        {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="h-14 bg-white/[0.04] animate-pulse rounded-lg" />
         ))}
       </div>
@@ -109,25 +195,11 @@ export function DefiPositions(): React.ReactNode {
   return (
     <div>
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard label="Total Value" value={formatUsd(totalValue)} />
-        <StatCard label="Total Earned" value={`+${formatUsd(totalEarned)}`} color="#34d399" />
-        <StatCard label="Positions" value={String(positions.length)} />
-        <StatCard label="Avg APY" value={`${avgApy.toFixed(2)}%`} color="#34d399" />
+        <StatCard label="Protocols" value={String(positions.length)} />
+        <StatCard label="Positions" value={String(positions.reduce((s, p) => s + p.investmentCount, 0))} />
       </div>
-
-      {/* Collect All */}
-      {totalEarned > 0 && (
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={() => collectMutation.mutate()}
-            disabled={collectMutation.isPending}
-            className="px-4 py-1.5 rounded text-[11px] font-semibold bg-[#34d399]/10 text-[#34d399] border border-[#34d399]/20 hover:bg-[#34d399]/20 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {collectMutation.isPending ? "Collecting..." : `Collect All (${formatUsd(totalEarned)})`}
-          </button>
-        </div>
-      )}
 
       {/* Position list */}
       <div className="space-y-2">
@@ -140,53 +212,21 @@ export function DefiPositions(): React.ReactNode {
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors cursor-pointer text-left"
               >
                 <div className="flex items-center gap-2">
+                  {pos.platformLogo && (
+                    <img src={pos.platformLogo} alt="" className="w-4 h-4 rounded-full" />
+                  )}
                   <span className="text-xs font-mono font-semibold text-[#fafafa]">{pos.name}</span>
-                  <TypeBadge type={pos.productType} />
-                  <StatusBadge status={pos.status} />
+                  <StatusBadge status="Active" />
                 </div>
                 <div className="flex items-center gap-6 text-xs font-mono">
                   <span className="text-[#fafafa]">{formatUsd(pos.value)}</span>
-                  <span className="text-[#34d399]">+{formatUsd(pos.earned)}</span>
+                  <span className="text-[#52525b] text-[10px]">{pos.investmentCount} pos</span>
                   <span className="text-[#52525b]">{isOpen ? "▲" : "▼"}</span>
                 </div>
               </button>
 
-              {isOpen && (
-                <div className="px-4 pb-4 pt-1 border-t border-white/[0.04] space-y-3">
-                  {pos.lower && pos.upper && pos.current && (
-                    <div>
-                      <div className="text-[10px] font-mono text-[#52525b] mb-1">
-                        Range: {pos.lower.toFixed(4)} — {pos.upper.toFixed(4)}
-                      </div>
-                      <RangeBar lower={pos.lower} upper={pos.upper} current={pos.current} />
-                    </div>
-                  )}
-
-                  <div className="flex gap-6 text-[11px] font-mono">
-                    <div><span className="text-[#52525b]">Platform </span><span className="text-[#a1a1aa]">{pos.platform}</span></div>
-                    <div><span className="text-[#52525b]">APY </span><span className="text-emerald-400">{pos.apy.toFixed(2)}%</span></div>
-                    {pos.openedAt && <div><span className="text-[#52525b]">Opened </span><span className="text-[#a1a1aa]">{pos.openedAt}</span></div>}
-                  </div>
-
-                  <div className="flex gap-2">
-                    {pos.earned > 0 && (
-                      <button
-                        onClick={() => collectMutation.mutate()}
-                        disabled={collectMutation.isPending}
-                        className="px-3 py-1.5 rounded text-[10px] font-semibold bg-[#34d399]/10 text-[#34d399] border border-[#34d399]/20 hover:bg-[#34d399]/20 transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        Collect {formatUsd(pos.earned)}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => exitMutation.mutate({ id: pos.investmentId, ratio: 1 })}
-                      disabled={exitMutation.isPending}
-                      className="px-3 py-1.5 rounded text-[10px] font-semibold bg-white/[0.04] text-[#a1a1aa] border border-white/[0.06] hover:text-[#fafafa] transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      {exitMutation.isPending ? "Exiting..." : "Exit Position"}
-                    </button>
-                  </div>
-                </div>
+              {isOpen && address && (
+                <PositionDetail address={address} pos={pos} />
               )}
             </div>
           );

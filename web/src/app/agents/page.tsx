@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PendingApprovals } from "../../components/pending-approvals";
 import { SettingsPanel } from "../../components/settings-panel";
+import { STALE_FAST, REFETCH_FAST } from "../../lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 
@@ -22,26 +23,60 @@ const TYPE_COLOR: Record<string, string> = { verdict: "#34d399", "new-token": "#
 function truncAddr(a: string): string { return `${a.slice(0, 6)}...${a.slice(-4)}`; }
 function fmtTime(ts: number): string { return new Date(ts).toLocaleTimeString("en-US", { hour12: false }); }
 
+async function fetchAgentsData(): Promise<Agent[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/agents`);
+    if (!res.ok) return [];
+    const d = await res.json();
+    return (d as { agents: Agent[] }).agents ?? [];
+  } catch { return []; }
+}
+
+async function fetchAgentStats(): Promise<{ stats: Stats | null; eventStats: EventStats | null }> {
+  try {
+    const res = await fetch(`${API_URL}/api/stats`);
+    if (!res.ok) return { stats: null, eventStats: null };
+    const d = await res.json();
+    return {
+      stats: (d as { verdicts: Stats }).verdicts ?? null,
+      eventStats: (d as { events: EventStats }).events ?? null,
+    };
+  } catch { return { stats: null, eventStats: null }; }
+}
+
+async function fetchAgentEvents(): Promise<AgentEvent[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/events/history?limit=50`);
+    if (!res.ok) return [];
+    const d = await res.json();
+    return (d as { events: AgentEvent[] }).events ?? [];
+  } catch { return []; }
+}
+
 export default function AgentsPage(): React.ReactNode {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [eventStats, setEventStats] = useState<EventStats | null>(null);
-  const [events, setEvents] = useState<AgentEvent[]>([]);
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents-list"],
+    queryFn: fetchAgentsData,
+    staleTime: STALE_FAST,
+    refetchInterval: REFETCH_FAST,
+  });
 
-  const fetchData = useCallback(async (): Promise<void> => {
-    try {
-      const [aR, sR, eR] = await Promise.all([
-        fetch(`${API_URL}/api/agents`),
-        fetch(`${API_URL}/api/stats`),
-        fetch(`${API_URL}/api/events/history?limit=50`),
-      ]);
-      if (aR.ok) { const d = await aR.json(); setAgents((d as { agents: Agent[] }).agents ?? []); }
-      if (sR.ok) { const d = await sR.json(); setStats((d as { verdicts: Stats }).verdicts ?? null); setEventStats((d as { events: EventStats }).events ?? null); }
-      if (eR.ok) { const d = await eR.json(); setEvents((d as { events: AgentEvent[] }).events ?? []); }
-    } catch { /* */ }
-  }, []);
+  const { data: statsData } = useQuery({
+    queryKey: ["agents-stats"],
+    queryFn: fetchAgentStats,
+    staleTime: STALE_FAST,
+    refetchInterval: REFETCH_FAST,
+  });
 
-  useEffect(() => { fetchData(); const iv = setInterval(fetchData, 10_000); return () => clearInterval(iv); }, [fetchData]);
+  const { data: events = [] } = useQuery({
+    queryKey: ["agents-events"],
+    queryFn: fetchAgentEvents,
+    staleTime: STALE_FAST,
+    refetchInterval: REFETCH_FAST,
+  });
+
+  const stats = statsData?.stats ?? null;
+  const eventStats = statsData?.eventStats ?? null;
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8">

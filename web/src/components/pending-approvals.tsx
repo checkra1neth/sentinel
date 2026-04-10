@@ -9,6 +9,7 @@ import {
   rejectPending,
   truncAddr,
   REFETCH_FAST,
+  STALE_FAST,
 } from "../lib/api";
 
 export function PendingApprovals(): React.ReactNode {
@@ -17,12 +18,14 @@ export function PendingApprovals(): React.ReactNode {
   const { data: analyzeQueue = [] } = useQuery({
     queryKey: ["pendingAnalyze"],
     queryFn: fetchPendingAnalyze,
+    staleTime: STALE_FAST,
     refetchInterval: REFETCH_FAST,
   });
 
   const { data: investQueue = [] } = useQuery({
     queryKey: ["pendingInvest"],
     queryFn: fetchPendingInvest,
+    staleTime: STALE_FAST,
     refetchInterval: REFETCH_FAST,
   });
 

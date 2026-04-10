@@ -1,5 +1,9 @@
 import { type Address } from "viem";
-import { onchainosWallet, onchainosPayment } from "../lib/onchainos.js";
+import {
+  onchainosWallet,
+  onchainosPayment,
+  withOnchainosWalletAccount,
+} from "../lib/onchainos.js";
 import { config } from "../config.js";
 
 /**
@@ -17,21 +21,21 @@ export class AgenticWallet {
     this.role = role;
   }
 
-  /** Switch onchainos CLI context to this wallet's account. */
-  private async activate(): Promise<void> {
-    if (!this.accountId) return;
-    onchainosWallet.switchAccount(this.accountId);
+  /** Serialize account switching because onchainos CLI stores wallet context globally. */
+  private async withAccount<T>(fn: () => T | Promise<T>): Promise<T> {
+    return withOnchainosWalletAccount(this.accountId, fn);
   }
 
   /** Get native or token balance on X Layer. */
   async getBalance(tokenAddress?: string): Promise<string> {
-    await this.activate();
-    const result = onchainosWallet.balance(config.chainId, tokenAddress);
-    if (!result.success) {
-      return "0";
-    }
-    const data = result.data as Record<string, unknown>;
-    return String(data.balance ?? data.amount ?? "0");
+    return this.withAccount(() => {
+      const result = onchainosWallet.balance(config.chainId, tokenAddress);
+      if (!result.success) {
+        return "0";
+      }
+      const data = result.data as Record<string, unknown>;
+      return String(data.balance ?? data.amount ?? "0");
+    });
   }
 
   /** Convenience: get USDT balance. */
@@ -41,25 +45,28 @@ export class AgenticWallet {
 
   /** Send native or ERC-20 tokens. */
   async send(amount: string, to: Address, tokenAddress?: string): Promise<boolean> {
-    await this.activate();
-    const result = onchainosWallet.send(to, amount, config.chainId, tokenAddress);
-    return result.success;
+    return this.withAccount(() => {
+      const result = onchainosWallet.send(to, amount, config.chainId, tokenAddress);
+      return result.success;
+    });
   }
 
   /** Execute an arbitrary contract call via onchainos CLI. */
   async contractCall(to: Address, inputData: string, value?: string): Promise<boolean> {
-    await this.activate();
-    const result = onchainosWallet.contractCall(to, config.chainId, inputData, value);
-    return result.success;
+    return this.withAccount(() => {
+      const result = onchainosWallet.contractCall(to, config.chainId, inputData, value);
+      return result.success;
+    });
   }
 
   /** Sign an arbitrary message. */
   async signMessage(message: string): Promise<string | null> {
-    await this.activate();
-    const result = onchainosWallet.signMessage(config.chainId, this.address, message);
-    if (!result.success) return null;
-    const data = result.data as Record<string, unknown>;
-    return String(data.signature ?? data);
+    return this.withAccount(() => {
+      const result = onchainosWallet.signMessage(config.chainId, this.address, message);
+      if (!result.success) return null;
+      const data = result.data as Record<string, unknown>;
+      return String(data.signature ?? data);
+    });
   }
 
   /** Sign an x402 payment authorization for service purchases. */
@@ -68,25 +75,26 @@ export class AgenticWallet {
     amount: string,
     asset: Address,
   ): Promise<{ signature: string; authorization: Record<string, string> } | null> {
-    await this.activate();
-    const network = `eip155:${config.chainId}`;
-    const result = onchainosPayment.x402Pay(network, amount, payTo, asset);
-    if (!result.success) return null;
+    return this.withAccount(() => {
+      const network = `eip155:${config.chainId}`;
+      const result = onchainosPayment.x402Pay(network, amount, payTo, asset);
+      if (!result.success) return null;
 
-    const data = result.data as Record<string, unknown>;
-    return {
-      signature: String(data.signature ?? ""),
-      authorization: {
-        payer: this.address,
-        payTo,
-        amount,
-        asset,
-        network,
-        ...(typeof data.authorization === "object" && data.authorization !== null
-          ? (data.authorization as Record<string, string>)
-          : {}),
-      },
-    };
+      const data = result.data as Record<string, unknown>;
+      return {
+        signature: String(data.signature ?? ""),
+        authorization: {
+          payer: this.address,
+          payTo,
+          amount,
+          asset,
+          network,
+          ...(typeof data.authorization === "object" && data.authorization !== null
+            ? (data.authorization as Record<string, string>)
+            : {}),
+        },
+      };
+    });
   }
 }
 

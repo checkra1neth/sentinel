@@ -3,7 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { sendChatMessage, type ChatResponse } from "../lib/chat-api";
-import { createAgentWallet, type AgentWalletInfo } from "../lib/wallet-api";
+import {
+  createAgentWallet,
+  getAgentBalance,
+  type AgentWalletInfo,
+} from "../lib/wallet-api";
 import { ChatMessage } from "./chat-message";
 
 interface Message {
@@ -29,8 +33,10 @@ const QUICK_ACTIONS = [
 ];
 
 /** Format USDT balance from minimal units (6 decimals) to human-readable. */
-function formatUsdtBalance(raw: string): string {
+function formatUsdtBalance(raw: string | undefined | null): string {
+  if (!raw) return "0.00";
   const val = Number(raw) / 1e6;
+  if (Number.isNaN(val)) return "0.00";
   return val.toFixed(2);
 }
 
@@ -49,6 +55,15 @@ export function ChatPanel(): React.ReactNode {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const refreshAgentWallet = useCallback(async (userAddress: string) => {
+    const info = await getAgentBalance(userAddress);
+    setAgentWallet((current) => ({
+      agentWallet: info.agentWallet ?? current?.agentWallet ?? "",
+      depositAddress: current?.depositAddress ?? info.agentWallet ?? "",
+      balance: info.balance,
+    }));
+  }, []);
+
   /* Initialize agent wallet when user connects MetaMask */
   useEffect(() => {
     if (!address) {
@@ -65,8 +80,17 @@ export function ChatPanel(): React.ReactNode {
         console.warn("[chat-panel] Failed to create agent wallet:", err);
       });
 
-    return () => { cancelled = true; };
-  }, [address]);
+    const pollId = setInterval(() => {
+      void refreshAgentWallet(address).catch((err) => {
+        console.warn("[chat-panel] Failed to refresh agent wallet:", err);
+      });
+    }, 15_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollId);
+    };
+  }, [address, refreshAgentWallet]);
 
   /* Auto-scroll to bottom when messages change */
   useEffect(() => {
@@ -95,6 +119,12 @@ export function ChatPanel(): React.ReactNode {
         data: response.data,
       };
       setMessages((prev) => [...prev, agentMsg]);
+
+      if (address) {
+        await refreshAgentWallet(address).catch((err) => {
+          console.warn("[chat-panel] Failed to refresh agent wallet after chat action:", err);
+        });
+      }
     } catch {
       const errorMsg: Message = {
         id: nextId(),
@@ -139,11 +169,20 @@ export function ChatPanel(): React.ReactNode {
           <div className="flex items-center gap-3 text-xs text-[#a1a1aa]">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Agent Wallet
+              TEE Wallet
             </span>
-            <span className="font-mono text-[#71717a]">
-              {agentWallet.agentWallet.slice(0, 6)}...{agentWallet.agentWallet.slice(-4)}
-            </span>
+            <button
+              type="button"
+              className="font-mono text-[#71717a] hover:text-[#a1a1aa] transition-colors cursor-pointer"
+              title="Copy address"
+              onClick={() => {
+                if (agentWallet.agentWallet) {
+                  void navigator.clipboard.writeText(agentWallet.agentWallet);
+                }
+              }}
+            >
+              {agentWallet.agentWallet?.slice(0, 6)}...{agentWallet.agentWallet?.slice(-4)} 📋
+            </button>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <span className="text-[#a1a1aa]">
@@ -156,7 +195,7 @@ export function ChatPanel(): React.ReactNode {
       {/* Fund agent message */}
       {agentWallet && agentWallet.balance === "0" && (
         <div className="mx-4 md:mx-6 lg:mx-10 mt-2 px-3 py-2 rounded-lg bg-[#06b6d4]/[0.06] border border-[#06b6d4]/10 text-xs text-[#a1a1aa]">
-          Fund your agent: send USDT to <span className="font-mono text-[#06b6d4]">{agentWallet.depositAddress}</span> on X Layer
+          Fund your TEE wallet: send USDT to <span className="font-mono text-[#06b6d4]">{agentWallet.depositAddress}</span> on X Layer
         </div>
       )}
 

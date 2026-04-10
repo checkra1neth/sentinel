@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchTokenHolders, fetchClusterHolders, truncAddr } from "../lib/api";
+import { fetchTokenHolders, fetchClusterHolders, truncAddr, STALE_NORMAL, REFETCH_SLOW } from "../lib/api";
 
 const TAG_STYLE: Record<string, string> = {
   "3": "text-[#a78bfa] bg-[rgba(167,139,250,0.08)]",
@@ -17,15 +17,19 @@ function tagLabel(tag: string | number): string {
   return "normal";
 }
 
-export function TabHolders({ address }: { address: string }): React.ReactNode {
+export function TabHolders({ address, chainId }: { address: string; chainId?: number }): React.ReactNode {
   const { data: holdersData } = useQuery({
-    queryKey: ["holders-full", address],
-    queryFn: () => fetchTokenHolders(address),
+    queryKey: ["holders-full", address, chainId],
+    queryFn: () => fetchTokenHolders(address, undefined, chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const { data: clusterData } = useQuery({
-    queryKey: ["cluster-holders", address],
-    queryFn: () => fetchClusterHolders(address),
+    queryKey: ["cluster-holders", address, chainId],
+    queryFn: () => fetchClusterHolders(address, "3", chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const holders = Array.isArray(holdersData?.data) ? (holdersData.data as Record<string, unknown>[]) : [];

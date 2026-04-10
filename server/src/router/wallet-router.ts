@@ -1,34 +1,48 @@
 // ---------------------------------------------------------------------------
 // Wallet Router
-// Endpoints for user agent wallet creation, balance queries, and deposits.
+// Endpoints for creating a user-dedicated TEE wallet and reading its balance.
 // ---------------------------------------------------------------------------
 
 import { Router, type Request, type Response } from "express";
+import { isAddress } from "viem";
 import { userWalletManager } from "../wallet/user-wallet-manager.js";
+
+function validateWalletAddress(value: unknown): string | null {
+  return typeof value === "string" && isAddress(value)
+    ? value
+    : null;
+}
 
 export function createWalletRouter(): Router {
   const router = Router();
 
   // -------------------------------------------------------------------------
   // POST /api/wallet/create
-  // Create or retrieve an agent wallet account for a user's MetaMask address.
+  // Create or retrieve a dedicated TEE wallet account for a user's EOA.
   // Body: { walletAddress: string }
   // -------------------------------------------------------------------------
 
-  router.post("/wallet/create", (req: Request, res: Response): void => {
-    const { walletAddress } = req.body as { walletAddress?: string };
+  router.post("/wallet/create", async (req: Request, res: Response): Promise<void> => {
+    const walletAddress = validateWalletAddress((req.body as { walletAddress?: unknown })?.walletAddress);
 
-    if (!walletAddress || typeof walletAddress !== "string") {
-      res.status(400).json({ error: "walletAddress is required" });
+    if (!walletAddress) {
+      res.status(400).json({ error: "Valid walletAddress is required" });
       return;
     }
 
-    const account = userWalletManager.getOrCreateAccount(walletAddress);
-    res.json({
-      agentWallet: account.agentWalletAddress,
-      depositAddress: account.agentWalletAddress,
-      balance: account.depositedBalance,
-    });
+    try {
+      const account = await userWalletManager.getOrCreateAccount(walletAddress);
+      const balance = await userWalletManager.getUsdtBalanceForAccount(account);
+
+      res.json({
+        agentWallet: account.agentWalletAddress,
+        depositAddress: account.agentWalletAddress,
+        balance,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to provision TEE wallet";
+      res.status(503).json({ error: message });
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -36,49 +50,61 @@ export function createWalletRouter(): Router {
   // Query: ?address=0x...
   // -------------------------------------------------------------------------
 
-  router.get("/wallet/balance", (req: Request, res: Response): void => {
-    const address = req.query.address as string | undefined;
+  router.get("/wallet/balance", async (req: Request, res: Response): Promise<void> => {
+    const address = validateWalletAddress(req.query.address);
 
-    if (!address || typeof address !== "string") {
-      res.status(400).json({ error: "address query parameter is required" });
+    if (!address) {
+      res.status(400).json({ error: "Valid address query parameter is required" });
       return;
     }
 
-    const account = userWalletManager.getOrCreateAccount(address);
-    res.json({
-      balance: account.depositedBalance,
-      agentWallet: account.agentWalletAddress,
-    });
+    try {
+      const account = await userWalletManager.getOrCreateAccount(address);
+      const balance = await userWalletManager.getUsdtBalanceForAccount(account);
+
+      res.json({
+        balance,
+        agentWallet: account.agentWalletAddress,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load TEE wallet balance";
+      res.status(503).json({ error: message });
+    }
   });
 
   // -------------------------------------------------------------------------
   // POST /api/wallet/deposit
-  // Record a user deposit after they send USDT to the Sentinel wallet.
-  // Body: { walletAddress: string, txHash: string, amount: string }
+  // Legacy compatibility endpoint. The source of truth is the live on-chain
+  // USDT balance of the user's TEE wallet.
+  // Body: { walletAddress: string, txHash?: string }
   // -------------------------------------------------------------------------
 
-  router.post("/wallet/deposit", (req: Request, res: Response): void => {
-    const { walletAddress, txHash, amount } = req.body as {
-      walletAddress?: string;
-      txHash?: string;
-      amount?: string;
-    };
+  router.post("/wallet/deposit", async (req: Request, res: Response): Promise<void> => {
+    const { txHash } = req.body as { txHash?: string };
+    const walletAddress = validateWalletAddress((req.body as { walletAddress?: unknown })?.walletAddress);
 
-    if (!walletAddress || !txHash || !amount) {
-      res.status(400).json({ error: "walletAddress, txHash, and amount are required" });
+    if (!walletAddress) {
+      res.status(400).json({ error: "Valid walletAddress is required" });
       return;
     }
 
-    // TODO: In production, verify the txHash on-chain before crediting
-    console.log(`[wallet-router] Deposit recorded: ${walletAddress} sent ${amount} USDT (tx: ${txHash})`);
+    try {
+      const account = await userWalletManager.getOrCreateAccount(walletAddress);
+      const newBalance = await userWalletManager.getUsdtBalanceForAccount(account);
 
-    userWalletManager.recordDeposit(walletAddress, amount);
-    const newBalance = userWalletManager.getBalance(walletAddress);
+      if (txHash) {
+        console.log(`[wallet-router] Deposit sync requested for ${walletAddress} (tx: ${txHash})`);
+      }
 
-    res.json({
-      success: true,
-      newBalance,
-    });
+      res.json({
+        success: true,
+        newBalance,
+        agentWallet: account.agentWalletAddress,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to sync TEE wallet balance";
+      res.status(503).json({ error: message });
+    }
   });
 
   return router;

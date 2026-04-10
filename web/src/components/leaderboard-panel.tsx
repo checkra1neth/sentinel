@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchLeaderboard, truncAddr, REFETCH_NORMAL } from "../lib/api";
+import { fetchLeaderboard, truncAddr, REFETCH_NORMAL, STALE_SLOW } from "../lib/api";
 
 const TIME_FRAMES = [
   { label: "1d", value: "1" },
@@ -16,6 +16,7 @@ export function LeaderboardPanel(): React.ReactNode {
   const { data } = useQuery({
     queryKey: ["leaderboard", timeFrame],
     queryFn: () => fetchLeaderboard(timeFrame),
+    staleTime: STALE_SLOW,
     refetchInterval: REFETCH_NORMAL,
   });
 

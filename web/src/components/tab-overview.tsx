@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchTokenCluster, fetchTokenHolders, fetchTopTraders, truncAddr } from "../lib/api";
+import { fetchTokenCluster, fetchTokenHolders, fetchTopTraders, truncAddr, STALE_NORMAL, REFETCH_SLOW } from "../lib/api";
 import { type Verdict } from "../lib/api";
 
 const TAG_STYLE: Record<string, string> = {
@@ -30,22 +30,29 @@ function KVRow({ label, value }: { label: string; value: React.ReactNode }): Rea
 interface TabOverviewProps {
   address: string;
   verdict: Verdict | null;
+  chainId?: number;
 }
 
-export function TabOverview({ address, verdict }: TabOverviewProps): React.ReactNode {
+export function TabOverview({ address, verdict, chainId }: TabOverviewProps): React.ReactNode {
   const { data: clusterData } = useQuery({
-    queryKey: ["cluster", address],
-    queryFn: () => fetchTokenCluster(address),
+    queryKey: ["cluster", address, chainId],
+    queryFn: () => fetchTokenCluster(address, chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const { data: holdersData } = useQuery({
-    queryKey: ["holders", address],
-    queryFn: () => fetchTokenHolders(address),
+    queryKey: ["holders", address, chainId],
+    queryFn: () => fetchTokenHolders(address, undefined, chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const { data: tradersData } = useQuery({
-    queryKey: ["top-traders", address],
-    queryFn: () => fetchTopTraders(address),
+    queryKey: ["top-traders", address, chainId],
+    queryFn: () => fetchTopTraders(address, chainId),
+    staleTime: STALE_NORMAL,
+    refetchInterval: REFETCH_SLOW,
   });
 
   const cluster = (clusterData?.data ?? clusterData) as Record<string, unknown> | undefined;
@@ -109,33 +116,34 @@ export function TabOverview({ address, verdict }: TabOverviewProps): React.React
             </tbody>
           </table>
         </div>
-        <div>
-          <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Top Traders PnL</div>
-          <table className="w-full text-[11px] font-mono">
-            <thead>
-              <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
-                <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
-                <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Total PnL</th>
-                <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Hold %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {traders.map((t, i) => {
-                const pnl = Number(t.totalPnlUsd ?? t.realizedPnlUsd ?? 0);
-                return (
-                  <tr key={i} className="border-b border-white/[0.03]">
-                    <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? ""))}</td>
-                    <td className={`py-1.5 text-right ${pnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
-                      {pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </td>
-                    <td className="py-1.5 text-right text-[#a1a1aa]">{t.holdPercent ? `${Number(t.holdPercent).toFixed(2)}%` : "—"}</td>
-                  </tr>
-                );
-              })}
-              {traders.length === 0 && <tr><td colSpan={3} className="py-2 text-[#52525b]">No data</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        {traders.length > 0 && (
+          <div>
+            <div className="text-[10px] font-medium text-[#52525b] uppercase tracking-wider mb-2">Top Traders PnL</div>
+            <table className="w-full text-[11px] font-mono">
+              <thead>
+                <tr className="text-[#52525b] text-left border-b border-white/[0.06]">
+                  <th className="pb-1.5 font-medium text-[10px] uppercase">Address</th>
+                  <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Total PnL</th>
+                  <th className="pb-1.5 font-medium text-[10px] uppercase text-right">Hold %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {traders.map((t, i) => {
+                  const pnl = Number(t.totalPnlUsd ?? t.realizedPnlUsd ?? 0);
+                  return (
+                    <tr key={i} className="border-b border-white/[0.03]">
+                      <td className="py-1.5 text-[#52525b]">{truncAddr(String(t.holderWalletAddress ?? ""))}</td>
+                      <td className={`py-1.5 text-right ${pnl >= 0 ? "text-[#34d399]" : "text-[#ef4444]"}`}>
+                        {pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className="py-1.5 text-right text-[#a1a1aa]">{t.holdPercent ? `${Number(t.holdPercent).toFixed(2)}%` : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

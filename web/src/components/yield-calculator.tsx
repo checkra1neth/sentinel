@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDefiProducts, fetchYields, formatUsd, STALE_NORMAL, REFETCH_SLOW } from "../lib/api";
+import { fetchAllDefiProducts, fetchYields, formatUsd, STALE_NORMAL, REFETCH_SLOW } from "../lib/api";
 import { YieldChart } from "./yield-chart";
 
 type Period = "7" | "30" | "90" | "365";
@@ -20,16 +20,36 @@ interface Pool {
   platform: string;
   apy: number;
   productType: string;
+  chain: string;
 }
 
-const STAKE_KEYWORDS = ["staking", "stake", "marinade", "solayer", "lido", "rocket pool", "jito", "sanctum"];
-const LEND_KEYWORDS = ["aave", "compound", "kamino", "fluid", "morpho", "spark", "yearn", "benqi", "venus", "lending"];
-const LP_KEYWORDS = ["uniswap", "sushiswap", "pancakeswap", "curve", "balancer", "raydium", "orca"];
+const EVM_CHAINS = [
+  { value: "", label: "All EVM" },
+  { value: "Ethereum", label: "Ethereum" },
+  { value: "Base", label: "Base" },
+  { value: "Arbitrum", label: "Arbitrum" },
+  { value: "Optimism", label: "Optimism" },
+  { value: "Polygon", label: "Polygon" },
+  { value: "BSC", label: "BNB Chain" },
+  { value: "Avalanche", label: "Avalanche" },
+];
+
+// Non-EVM chains to exclude
+const NON_EVM = new Set(["Solana", "Sui", "Aptos", "Cosmos", "Near", "Tron", "Ton", "Starknet", "Sei", "Injective", "Osmosis", "Celestia"]);
+
+const CHAIN_INDEX_TO_NAME: Record<string, string> = {
+  "1": "Ethereum", "8453": "Base", "42161": "Arbitrum", "10": "Optimism",
+  "137": "Polygon", "56": "BSC", "43114": "Avalanche", "196": "X Layer",
+  "324": "zkSync", "250": "Fantom",
+};
+
+const STAKE_KEYWORDS = ["staking", "stake", "lido", "rocket pool"];
+const LEND_KEYWORDS = ["aave", "compound", "fluid", "morpho", "spark", "yearn", "benqi", "venus", "lending"];
 
 function inferProductType(name: string, platform: string, explicit: unknown): string {
   if (explicit && typeof explicit === "string") return explicit;
   const combined = `${name} ${platform}`.toLowerCase();
-  if (LP_KEYWORDS.some((k) => combined.includes(k)) || name.includes("/")) return "DEX_POOL";
+  if (name.includes("-") || name.includes("/")) return "DEX_POOL";
   if (STAKE_KEYWORDS.some((k) => combined.includes(k))) return "SINGLE_EARN";
   if (LEND_KEYWORDS.some((k) => combined.includes(k))) return "LENDING";
   return "SINGLE_EARN";
@@ -39,60 +59,84 @@ export function YieldCalculator(): React.ReactNode {
   const router = useRouter();
   const [amountStr, setAmountStr] = useState("1000");
   const [period, setPeriod] = useState<Period>("30");
+  const [selectedChain, setSelectedChain] = useState("");
   const amount = Number(amountStr) || 0;
   const days = Number(period);
 
-  const { data: productsData, isLoading } = useQuery({
-    queryKey: ["defi-products"],
-    queryFn: () => fetchDefiProducts(),
+  // DefiLlama yields — primary source (has chain filter built in)
+  const { data: yieldsData, isLoading: yieldsLoading } = useQuery({
+    queryKey: ["yields", selectedChain],
+    queryFn: () => fetchYields(undefined, selectedChain || undefined),
     staleTime: STALE_NORMAL,
     refetchInterval: REFETCH_SLOW,
   });
 
-  const { data: yieldsData } = useQuery({
-    queryKey: ["yields"],
-    queryFn: () => fetchYields(),
+  // OKX products — all pages
+  const { data: productsData } = useQuery({
+    queryKey: ["defi-products-all"],
+    queryFn: () => fetchAllDefiProducts(),
     staleTime: STALE_NORMAL,
     refetchInterval: REFETCH_SLOW,
   });
 
   const pools = useMemo((): Pool[] => {
-    const raw = productsData as Record<string, unknown> | null;
-    const dataObj = raw?.data as Record<string, unknown> | undefined;
-    const list = dataObj?.list ?? raw?.list ?? raw?.products;
-    const products = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+    const mapped: Pool[] = [];
+    const seenIds = new Set<string>();
 
-    const mapped: Pool[] = products.map((p) => {
-      const name = String(p.name ?? p.poolName ?? "");
-      const platform = String(p.platformName ?? p.platform ?? p.protocol ?? "");
-      return {
-        investmentId: String(p.investmentId ?? p.id ?? ""),
-        name,
-        platform,
-        apy: Number(p.rate ?? p.apy ?? p.apr ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
-        productType: inferProductType(name, platform, p.investType ?? p.productGroup),
-      };
-    });
-
+    // 1. DefiLlama pools (primary — already chain-filtered by API)
     const yieldsArr = (yieldsData as Record<string, unknown>)?.pools as Record<string, unknown>[] | undefined;
     if (yieldsArr) {
       for (const y of yieldsArr) {
-        const id = String(y.investmentId ?? y.pool ?? "");
-        if (!mapped.some((p) => p.investmentId === id)) {
-          mapped.push({
-            investmentId: id,
-            name: String(y.name ?? y.symbol ?? ""),
-            platform: String(y.project ?? y.platform ?? ""),
-            apy: Number(y.apy ?? y.apyBase ?? 0),
-            productType: "DEX_POOL",
-          });
-        }
+        const chain = String(y.chain ?? "");
+        // Filter non-EVM
+        if (NON_EVM.has(chain)) continue;
+        const id = String(y.pool ?? "");
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        const name = String(y.symbol ?? "");
+        const platform = String(y.project ?? "");
+        mapped.push({
+          investmentId: id,
+          name,
+          platform,
+          apy: Number(y.apy ?? y.apyBase ?? 0),
+          productType: inferProductType(name, platform, null),
+          chain,
+        });
+      }
+    }
+
+    // 2. OKX products (supplement)
+    const raw = productsData as Record<string, unknown> | null;
+    const dataObj = raw?.data as Record<string, unknown> | undefined;
+    const list = dataObj?.list ?? raw?.list ?? raw?.products;
+    if (Array.isArray(list)) {
+      for (const p of list as Record<string, unknown>[]) {
+        const chainIdx = String(p.chainIndex ?? "");
+        const chain = CHAIN_INDEX_TO_NAME[chainIdx] ?? "";
+        // Skip non-EVM (unknown chains)
+        if (!chain) continue;
+        // Apply chain filter
+        if (selectedChain && chain !== selectedChain) continue;
+        const id = String(p.investmentId ?? p.id ?? "");
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        const name = String(p.name ?? p.poolName ?? "");
+        const platform = String(p.platformName ?? p.platform ?? "");
+        mapped.push({
+          investmentId: id,
+          name,
+          platform,
+          apy: Number(p.rate ?? p.apy ?? 0) * (Number(p.rate ?? 0) < 1 ? 100 : 1),
+          productType: inferProductType(name, platform, p.investType ?? p.productGroup),
+          chain,
+        });
       }
     }
 
     mapped.sort((a, b) => b.apy - a.apy);
-    return mapped.slice(0, 10);
-  }, [productsData, yieldsData]);
+    return mapped.slice(0, 30);
+  }, [yieldsData, productsData, selectedChain]);
 
   const results = useMemo(() => {
     return pools.map((pool) => {
@@ -118,6 +162,18 @@ export function YieldCalculator(): React.ReactNode {
             className="w-full bg-white/[0.04] border border-white/[0.06] rounded px-3 py-2 text-sm font-mono text-[#fafafa] placeholder:text-[#52525b] outline-none focus:border-[#06b6d4]/40"
           />
         </div>
+        <div>
+          <label className="block text-[11px] text-[#52525b] font-mono mb-1">Chain</label>
+          <select
+            value={selectedChain}
+            onChange={(e) => setSelectedChain(e.target.value)}
+            className="bg-white/[0.04] border border-white/[0.06] rounded px-3 py-2 text-sm font-mono text-[#fafafa] outline-none focus:border-[#06b6d4]/40 cursor-pointer"
+          >
+            {EVM_CHAINS.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        </div>
         <div className="flex gap-1.5">
           {PERIODS.map((p) => (
             <button
@@ -141,7 +197,7 @@ export function YieldCalculator(): React.ReactNode {
         </div>
       )}
 
-      {isLoading ? (
+      {yieldsLoading ? (
         <div className="py-12 text-center text-xs font-mono text-[#52525b]">Loading yield data...</div>
       ) : results.length === 0 ? (
         <div className="py-12 text-center text-xs font-mono text-[#52525b]">No yield data available</div>
@@ -152,6 +208,7 @@ export function YieldCalculator(): React.ReactNode {
               <tr className="text-left border-b border-white/[0.06]">
                 <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider">Pool</th>
                 <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider hidden md:table-cell">Protocol</th>
+                <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider hidden lg:table-cell">Chain</th>
                 <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">APY</th>
                 <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right">Return</th>
                 <th className="pb-2 font-medium text-[10px] text-[#52525b] uppercase tracking-wider text-right hidden sm:table-cell">Final Value</th>
@@ -164,6 +221,7 @@ export function YieldCalculator(): React.ReactNode {
                 <tr key={r.investmentId} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
                   <td className="py-2.5 pr-4 text-[#fafafa]">{r.name}</td>
                   <td className="py-2.5 pr-4 text-[#a1a1aa] hidden md:table-cell">{r.platform}</td>
+                  <td className="py-2.5 pr-4 text-[#71717a] hidden lg:table-cell">{r.chain}</td>
                   <td className="py-2.5 pr-4 text-right text-emerald-400">{r.apy.toFixed(2)}%</td>
                   <td className="py-2.5 pr-4 text-right text-emerald-400">+{formatUsd(r.returnAmt)}</td>
                   <td className="py-2.5 pr-4 text-right text-[#fafafa] hidden sm:table-cell">{formatUsd(r.finalValue)}</td>

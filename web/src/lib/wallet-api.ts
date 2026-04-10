@@ -15,6 +15,17 @@ export interface AgentBalanceInfo {
   agentWallet: string;
 }
 
+async function extractApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json() as { error?: string };
+    if (body.error) return body.error;
+  } catch {
+    // Ignore JSON parsing failures and fall back to the generic message.
+  }
+
+  return fallback;
+}
+
 /**
  * Create or retrieve an agent wallet for the connected user.
  */
@@ -26,7 +37,7 @@ export async function createAgentWallet(walletAddress: string): Promise<AgentWal
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to create agent wallet: ${res.status}`);
+    throw new Error(await extractApiError(res, `Failed to create agent wallet: ${res.status}`));
   }
 
   return res.json() as Promise<AgentWalletInfo>;
@@ -39,7 +50,7 @@ export async function getAgentBalance(walletAddress: string): Promise<AgentBalan
   const res = await fetch(`${API_URL}/api/wallet/balance?address=${encodeURIComponent(walletAddress)}`);
 
   if (!res.ok) {
-    throw new Error(`Failed to get agent balance: ${res.status}`);
+    throw new Error(await extractApiError(res, `Failed to get agent balance: ${res.status}`));
   }
 
   return res.json() as Promise<AgentBalanceInfo>;
@@ -60,7 +71,7 @@ export async function recordDeposit(
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to record deposit: ${res.status}`);
+    throw new Error(await extractApiError(res, `Failed to record deposit: ${res.status}`));
   }
 
   return res.json() as Promise<{ success: boolean; newBalance: string }>;
